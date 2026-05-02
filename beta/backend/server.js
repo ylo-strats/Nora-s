@@ -352,16 +352,23 @@ const viewerPath = path.join(__dirname, '..', 'viewer');
 const adminPath  = path.join(__dirname, '..', 'admin');
 const manifestFile = path.join(__dirname, 'data', 'manifest.json');
 
-app.use(express.static(viewerPath));
-app.use('/viewer', express.static(viewerPath));
+function sendViewer(req, res) {
+  const userId = normalizeUserId(req.query.user || PUBLIC_USER_ID);
+  const html = fs.readFileSync(path.join(viewerPath, 'index.html'), 'utf8')
+    .replace(/__PACKAGE_USER_ID__/g, userId)
+    .replace(/__LICENSE_SERVER__/g, '');
+
+  res.type('html').send(html);
+}
+
+app.get(['/', '/index.html', '/viewer', '/viewer/index.html'], sendViewer);
+
+app.use(express.static(viewerPath, { index: false }));
+app.use('/viewer', express.static(viewerPath, { index: false }));
 app.use('/admin', express.static(adminPath));
 
 app.get(['/manifest.json', '/viewer/manifest.json'], (req, res) => {
   res.sendFile(manifestFile);
-});
-
-app.get(['/', '/viewer'], (req, res) => {
-  res.sendFile(path.join(viewerPath, 'index.html'));
 });
 
 app.get('/admin', (req, res) => {

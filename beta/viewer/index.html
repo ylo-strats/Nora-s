@@ -302,6 +302,15 @@
     pingKey:    'sdrmv2_ping',
   };
 
+  var params = new URLSearchParams(window.location.search);
+  if (CFG.userId.indexOf('__PACKAGE_USER_ID__') !== -1) {
+    CFG.userId = (params.get('user') || 'USER-001').trim().toUpperCase().slice(0, 32);
+  }
+  if (CFG.server.indexOf('__LICENSE_SERVER__') !== -1) {
+    CFG.server = '';
+  }
+  CFG.server = CFG.server.replace(/\/$/, '');
+
   // ── State ─────────────────────────────────────────────────────────────
   var state = {
     token:       null,
