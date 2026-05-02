@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SecureDRM Admin</title>
+<style>
+  :root {
+    --bg:      #08090d;
+    --surface: #0f111a;
+    --card:    #141720;
+    --border:  #1e2333;
+    --accent:  #3b82f6;
+    --danger:  #ef4444;
+    --warn:    #f59e0b;
+    --success: #22c55e;
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); }
+
+  /* ── Auth screen ──────────────────────────────────────────────────── */
+  #auth-screen {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .auth-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 40px; width: 100%; max-width: 380px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .auth-card h1 { font-size: 20px; display: flex; align-items: center; gap: 10px; }
+  .auth-card p { font-size: 13px; color: var(--muted); }
+
+  /* ── Main layout ──────────────────────────────────────────────────── */
+  #admin-app { display: none; min-height: 100vh; }
+  #admin-app.show { display: block; }
+
+  #top-bar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 28px; height: 56px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  #top-bar h1 { font-size: 15px; font-weight: 700; }
+  #top-bar .spacer { flex: 1; }
+  #server-url-display { font-size: 12px; color: var(--muted); font-family: monospace; }
+
+  #main { padding: 28px; display: flex; flex-direction: column; gap: 24px; }
+
+  /* ── Stat cards ───────────────────────────────────────────────────── */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .stat-card .label { font-size: 12px; color: var(--muted); }
+  .stat-card .value { font-size: 28px; font-weight: 700; }
+  .stat-card .value.accent  { color: var(--accent); }
+  .stat-card .value.danger  { color: var(--danger); }
+  .stat-card .value.success { color: var(--success); }
+  .stat-card .value.warn    { color: var(--warn); }
+
+  /* ── Panel ────────────────────────────────────────────────────────── */
+  .panel {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+  }
+  .panel-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+    font-size: 14px; font-weight: 600;
+  }
+  .panel-header .actions { margin-left: auto; display: flex; gap: 8px; }
+  .panel-body { padding: 20px; }
+
+  /* ── Table ────────────────────────────────────────────────────────── */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 10px 12px; color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  }
+  .badge.ok      { background: rgba(34,197,94,.15);  color: var(--success); }
+  .badge.banned  { background: rgba(239,68,68,.15);  color: var(--danger); }
+  .badge.warn    { background: rgba(245,158,11,.15); color: var(--warn); }
+  .badge.neutral { background: rgba(100,116,139,.15); color: var(--muted); }
+
+  /* ── Controls ─────────────────────────────────────────────────────── */
+  input[type=text], input[type=password], input[type=number] {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 8px 12px; font-size: 13px; outline: none;
+    transition: border-color .2s; width: 100%;
+  }
+  input:focus { border-color: var(--accent); }
+
+  button {
+    padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+    font-size: 13px; font-weight: 500; transition: opacity .15s;
+  }
+  button:hover { opacity: .85; }
+  button:active { opacity: .7; }
+  .btn-primary { background: var(--accent);  color: #fff; }
+  .btn-danger  { background: var(--danger);  color: #fff; }
+  .btn-success { background: var(--success); color: #000; }
+  .btn-ghost   { background: var(--border);  color: var(--text); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  .form-row  { display: flex; gap: 8px; align-items: center; }
+  .form-row input { flex: 1; }
+  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 600px) { .config-grid { grid-template-columns: 1fr; } }
+
+  /* ── Suspicious log ───────────────────────────────────────────────── */
+  .log-entry {
+    font-size: 12px; font-family: monospace;
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    display: grid; grid-template-columns: 140px 80px 1fr auto;
+    gap: 8px; align-items: center;
+  }
+  .log-entry:last-child { border-bottom: none; }
+  .log-entry .ts { color: var(--muted); }
+  .log-entry .uid { color: var(--warn); }
+  .log-entry .reason { color: var(--text); }
+  .log-entry .ip { color: var(--muted); text-align: right; }
+  @media (max-width: 700px) { .log-entry { grid-template-columns: 1fr; } }
+
+  .empty { text-align: center; padding: 40px; color: var(--muted); font-size: 13px; }
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 999;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 18px; font-size: 13px;
+    transform: translateY(80px); opacity: 0;
+    transition: all .3s; pointer-events: none;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.ok  { border-color: var(--success); color: var(--success); }
+  .toast.err { border-color: var(--danger);  color: var(--danger); }
+</style>
+</head>
+<body>
+
+<!-- Auth gate -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <h1>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+      SecureDRM Admin
+    </h1>
+    <p>Enter your license server URL and admin secret to continue.</p>
+    <div>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Server URL</label>
+      <input type="text" id="inp-server" value="http://localhost:3001" placeholder="https://your-server.com"/>
+    </div>
+    <div>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Admin Secret</label>
+      <input type="password" id="inp-secret" placeholder="ADMIN_SECRET env var value"/>
+    </div>
+    <button class="btn-primary" onclick="connectAdmin()">Connect</button>
+    <div id="auth-err" style="color:var(--danger);font-size:12px;display:none"></div>
+  </div>
+</div>
+
+<!-- Admin app -->
+<div id="admin-app">
+  <div id="top-bar">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg>
+    <h1>SecureDRM Admin Console</h1>
+    <span class="spacer"></span>
+    <span class="server-url-display" id="server-url-display"></span>
+    <button class="btn-ghost btn-sm" onclick="loadStats()">↻ Refresh</button>
+    <button class="btn-ghost btn-sm" onclick="logout()">Logout</button>
+  </div>
+
+  <div id="main">
+
+    <!-- Stats -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="label">Total Issued</div>
+        <div class="value accent" id="st-issued">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Active Devices</div>
+        <div class="value success" id="st-active">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Banned Users</div>
+        <div class="value danger" id="st-banned">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Suspicious Events</div>
+        <div class="value warn" id="st-suspicious">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Max Users</div>
+        <div class="value" id="st-maxusers">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Max Devices / User</div>
+        <div class="value" id="st-maxdev">—</div>
+      </div>
+    </div>
+
+    <!-- Config + Issue -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+      <div class="panel">
+        <div class="panel-header">⚙️ Global Config</div>
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:14px">
+          <div class="config-grid">
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Max Users</label>
+              <input type="number" id="cfg-max-users" min="1" max="10000" placeholder="e.g. 50"/>
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Max Devices / User</label>
+              <input type="number" id="cfg-max-dev" min="1" max="10" placeholder="e.g. 2"/>
+            </div>
+          </div>
+          <button class="btn-primary" onclick="saveConfig()">Save Config</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">➕ Issue New Package</div>
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:14px">
+          <div>
+            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Custom User ID (optional)</label>
+            <input type="text" id="inp-new-uid" placeholder="Auto-generated if empty"/>
+          </div>
+          <button class="btn-success" onclick="issueUser()">Issue Package</button>
+          <div style="font-size:12px;color:var(--muted)">
+            Newly issued ID must be embedded into the user's package ZIP by the package generator tool.
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Users table -->
+    <div class="panel">
+      <div class="panel-header">
+        👤 User Licenses
+        <div class="actions">
+          <input type="text" id="user-search" placeholder="Filter users…" style="width:180px;padding:5px 10px;font-size:12px"/>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>User ID</th>
+              <th>Status</th>
+              <th>Devices</th>
+              <th>Last Seen</th>
+              <th>Access Count</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+        <div id="users-empty" class="empty" style="display:none">No users issued yet</div>
+      </div>
+    </div>
+
+    <!-- Devices detail (shown when row expanded) -->
+    <div class="panel" id="devices-panel" style="display:none">
+      <div class="panel-header">
+        🖥️ Devices — <span id="devices-uid"></span>
+        <div class="actions"><button class="btn-ghost btn-sm" onclick="closeDevices()">✕</button></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>FP Hash (truncated)</th><th>Registered</th><th>Last Seen</th><th>IP</th><th>Action</th></tr>
+          </thead>
+          <tbody id="devices-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Suspicious log -->
+    <div class="panel">
+      <div class="panel-header">
+        ⚠️ Suspicious Activity Log
+        <div class="actions"><button class="btn-ghost btn-sm" onclick="loadStats()">↻</button></div>
+      </div>
+      <div id="suspicious-log"></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  var cfg = { server: '', secret: '' };
+  var stats = null;
+
+  // ── Auth ────────────────────────────────────────────────────────────
+  window.connectAdmin = function() {
+    cfg.server = document.getElementById('inp-server').value.trim().replace(/\/$/, '');
+    cfg.secret = document.getElementById('inp-secret').value.trim();
+    if (!cfg.server || !cfg.secret) {
+      showAuthErr('Please fill in both fields.');
+      return;
+    }
+    api('GET', '/api/admin/stats').then(function() {
+      document.getElementById('auth-screen').style.display = 'none';
+      document.getElementById('admin-app').classList.add('show');
+      document.getElementById('server-url-display').textContent = cfg.server;
+      loadStats();
+    }).catch(function(e) {
+      showAuthErr('Connection failed: ' + (e.message || 'Check server URL and secret.'));
+    });
+  };
+
+  window.logout = function() {
+    cfg.server = ''; cfg.secret = '';
+    document.getElementById('admin-app').classList.remove('show');
+    document.getElementById('auth-screen').style.display = 'flex';
+  };
+
+  function showAuthErr(msg) {
+    var el = document.getElementById('auth-err');
+    el.textContent = msg; el.style.display = 'block';
+  }
+
+  // ── API ─────────────────────────────────────────────────────────────
+  function api(method, endpoint, body) {
+    var opts = {
+      method: method,
+      headers: {
+        'Authorization': 'Bearer ' + cfg.secret,
+        'Content-Type': 'application/json',
+      },
+    };
+    if (body) opts.body = JSON.stringify(body);
+    return fetch(cfg.server + endpoint, opts).then(function(r) {
+      if (r.status === 401) { logout(); throw new Error('Unauthorized'); }
+      return r.json();
+    });
+  }
+
+  // ── Stats ───────────────────────────────────────────────────────────
+  window.loadStats = function() {
+    api('GET', '/api/admin/stats').then(function(data) {
+      stats = data;
+      document.getElementById('st-issued').textContent     = data.totalIssued;
+      document.getElementById('st-active').textContent     = data.totalActive;
+      document.getElementById('st-banned').textContent     = data.totalBanned;
+      document.getElementById('st-suspicious').textContent = data.suspiciousLog.length;
+      document.getElementById('st-maxusers').textContent   = data.config.maxUsers;
+      document.getElementById('st-maxdev').textContent     = data.config.maxDevicesPerUser;
+      document.getElementById('cfg-max-users').value       = data.config.maxUsers;
+      document.getElementById('cfg-max-dev').value         = data.config.maxDevicesPerUser;
+      renderUsers(data.users);
+      renderLog(data.suspiciousLog);
+    }).catch(function(e) { toast('Failed to load stats: ' + e.message, true); });
+  };
+
+  // ── Users table ──────────────────────────────────────────────────────
+  function renderUsers(users) {
+    var filter = document.getElementById('user-search').value.toLowerCase();
+    var filtered = filter ? users.filter(function(u) { return u.id.toLowerCase().indexOf(filter) !== -1; }) : users;
+    var tbody = document.getElementById('users-tbody');
+    var empty = document.getElementById('users-empty');
+
+    if (!filtered.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+
+    tbody.innerHTML = filtered.map(function(u) {
+      var statusBadge = u.banned
+        ? '<span class="badge banned">Banned</span>'
+        : u.deviceCount > 0
+          ? '<span class="badge ok">Active</span>'
+          : '<span class="badge neutral">Pending</span>';
+      var last = u.lastSeen ? new Date(u.lastSeen).toLocaleDateString() : '—';
+      var banBtn = u.banned
+        ? '<button class="btn-success btn-sm" onclick="setBan(\'' + u.id + '\', false)">Unban</button>'
+        : '<button class="btn-danger btn-sm" onclick="setBan(\'' + u.id + '\', true)">Ban</button>';
+      return '<tr>' +
+        '<td style="font-family:monospace;font-weight:600">' + esc(u.id) + '</td>' +
+        '<td>' + statusBadge + '</td>' +
+        '<td>' +
+          '<button class="btn-ghost btn-sm" onclick="showDevices(\'' + u.id + '\')">' +
+            u.deviceCount + '/' + (stats ? stats.config.maxDevicesPerUser : '?') +
+          '</button>' +
+        '</td>' +
+        '<td style="color:var(--muted);font-size:12px">' + last + '</td>' +
+        '<td style="color:var(--muted)">' + (u.accessCount || 0) + '</td>' +
+        '<td style="display:flex;gap:6px">' + banBtn + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('user-search').addEventListener('input', function() {
+      if (stats) renderUsers(stats.users);
+    });
+  });
+
+  // ── Devices detail ───────────────────────────────────────────────────
+  window.showDevices = function(uid) {
+    if (!stats) return;
+    var user = stats.users.find(function(u) { return u.id === uid; });
+    if (!user) return;
+    document.getElementById('devices-uid').textContent = uid;
+    document.getElementById('devices-panel').style.display = 'block';
+    document.getElementById('devices-tbody').innerHTML = (user.devices || []).map(function(d) {
+      return '<tr>' +
+        '<td style="font-family:monospace;font-size:12px">' + esc(d.fpHash.slice(0, 24)) + '…</td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + new Date(d.registeredAt).toLocaleDateString() + '</td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + new Date(d.lastSeen).toLocaleDateString() + '</td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + esc(d.ip || '—') + '</td>' +
+        '<td><button class="btn-danger btn-sm" onclick="revokeDevice(\'' + uid + '\',\'' + d.fpHash + '\')">Revoke</button></td>' +
+        '</tr>';
+    }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No devices registered</td></tr>';
+  };
+
+  window.closeDevices = function() {
+    document.getElementById('devices-panel').style.display = 'none';
+  };
+
+  window.revokeDevice = function(userId, fpHash) {
+    if (!confirm('Revoke this device? The user will need to re-activate (device slot freed).')) return;
+    api('POST', '/api/admin/revoke-device', { userId: userId, fpHash: fpHash })
+      .then(function() { toast('Device revoked'); loadStats(); })
+      .catch(function(e) { toast(e.message, true); });
+  };
+
+  // ── Actions ──────────────────────────────────────────────────────────
+  window.saveConfig = function() {
+    var maxUsers = parseInt(document.getElementById('cfg-max-users').value);
+    var maxDev   = parseInt(document.getElementById('cfg-max-dev').value);
+    if (isNaN(maxUsers) || isNaN(maxDev)) { toast('Invalid values', true); return; }
+    api('POST', '/api/admin/config', { maxUsers: maxUsers, maxDevicesPerUser: maxDev })
+      .then(function() { toast('Config saved'); loadStats(); })
+      .catch(function(e) { toast(e.message, true); });
+  };
+
+  window.issueUser = function() {
+    var uid = document.getElementById('inp-new-uid').value.trim().toUpperCase() || undefined;
+    api('POST', '/api/admin/issue', uid ? { userId: uid } : {})
+      .then(function(r) {
+        if (!r.ok) { toast(r.error || 'Failed', true); return; }
+        toast('Issued: ' + r.userId + ' — generate the package ZIP with: node tools/generate-packages.js --users ' + r.userId);
+        document.getElementById('inp-new-uid').value = '';
+        loadStats();
+      })
+      .catch(function(e) { toast(e.message, true); });
+  };
+
+  window.setBan = function(userId, ban) {
+    var word = ban ? 'ban' : 'unban';
+    if (!confirm(word.charAt(0).toUpperCase() + word.slice(1) + ' ' + userId + '?')) return;
+    api('POST', '/api/admin/ban', { userId: userId, ban: ban })
+      .then(function() { toast(userId + ' ' + word + 'ned'); loadStats(); })
+      .catch(function(e) { toast(e.message, true); });
+  };
+
+  // ── Suspicious log ───────────────────────────────────────────────────
+  function renderLog(log) {
+    var el = document.getElementById('suspicious-log');
+    if (!log.length) { el.innerHTML = '<div class="empty">No suspicious activity detected</div>'; return; }
+    el.innerHTML = log.map(function(entry) {
+      return '<div class="log-entry">' +
+        '<span class="ts">' + new Date(entry.ts).toLocaleString() + '</span>' +
+        '<span class="uid">' + esc(entry.userId) + '</span>' +
+        '<span class="reason">' + esc(entry.reason) + '</span>' +
+        '<span class="ip">' + esc(entry.ip || '') + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  // ── Toast ────────────────────────────────────────────────────────────
+  function toast(msg, isErr) {
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast ' + (isErr ? 'err' : 'ok') + ' show';
+    clearTimeout(el._t);
+    el._t = setTimeout(function() { el.classList.remove('show'); }, isErr ? 5000 : 3000);
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Enter key on auth
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && document.getElementById('auth-screen').style.display !== 'none') {
+      connectAdmin();
+    }
+  });
+
+})();
+</script>
+</body>
+</html>

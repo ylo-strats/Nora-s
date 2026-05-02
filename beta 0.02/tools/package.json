@@ -1,0 +1,13 @@
+{
+  "name": "securedrm-tools",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "ingest": "node ingest.js",
+    "generate": "node generate-packages.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.10",
+    "mammoth": "^1.6.0"
+  }
+}

@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Secure Medical Knowledge Base</title>
+<meta name="robots" content="noindex,nofollow"/>
+<style>
+  :root {
+    --bg:       #0d0f14;
+    --surface:  #161921;
+    --border:   #252932;
+    --accent:   #3b82f6;
+    --accent2:  #1d4ed8;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --danger:   #ef4444;
+    --warn:     #f59e0b;
+    --success:  #22c55e;
+    --sidebar-w: 300px;
+    --header-h:  56px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%; overflow: hidden;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+    user-select: none; -webkit-user-select: none;
+  }
+
+  /* Prevent text selection and right-click */
+  body { -webkit-touch-callout: none; }
+
+  #app { display: flex; flex-direction: column; height: 100vh; }
+
+  /* ── Header ──────────────────────────────────────────────────────────── */
+  #header {
+    height: var(--header-h); flex-shrink: 0;
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: relative; z-index: 10;
+  }
+  #header .logo {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 700; font-size: 15px; letter-spacing: -.3px;
+  }
+  #header .logo svg { flex-shrink: 0; }
+  #header .status-pill {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; padding: 4px 10px;
+    border-radius: 999px; border: 1px solid var(--border);
+    background: rgba(255,255,255,.04);
+  }
+  #header .status-pill .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--muted);
+    transition: background .4s;
+  }
+  #header .status-pill .dot.ok  { background: var(--success); }
+  #header .status-pill .dot.bad { background: var(--danger); }
+  #hamburger {
+    display: none; background: none; border: none; cursor: pointer;
+    color: var(--text); padding: 6px;
+  }
+  @media (max-width: 700px) { #hamburger { display: flex; } }
+
+  /* ── Layout ──────────────────────────────────────────────────────────── */
+  #layout { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── Sidebar ─────────────────────────────────────────────────────────── */
+  #sidebar {
+    width: var(--sidebar-w); flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    transition: transform .25s ease;
+  }
+  #sidebar .search-wrap {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  #search {
+    width: 100%; padding: 8px 12px 8px 36px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text);
+    font-size: 13px; outline: none;
+    transition: border-color .2s;
+  }
+  #search:focus { border-color: var(--accent); }
+  .search-wrap { position: relative; }
+  .search-icon {
+    position: absolute; left: 22px; top: 50%;
+    transform: translateY(-50%); color: var(--muted); pointer-events: none;
+  }
+  #nav-list {
+    flex: 1; overflow-y: auto; padding: 8px;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .nav-item {
+    padding: 10px 12px; border-radius: 8px; cursor: pointer;
+    transition: background .15s; margin-bottom: 2px;
+    border: 1px solid transparent;
+  }
+  .nav-item:hover  { background: rgba(59,130,246,.08); }
+  .nav-item.active { background: rgba(59,130,246,.15); border-color: rgba(59,130,246,.3); }
+  .nav-item .title { font-size: 13px; font-weight: 500; line-height: 1.4; }
+  .nav-item .meta  { font-size: 11px; color: var(--muted); margin-top: 2px; display: flex; align-items: center; gap: 4px; }
+
+  #user-badge {
+    padding: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--muted);
+  }
+  #user-badge strong { color: var(--text); }
+
+  @media (max-width: 700px) {
+    #sidebar {
+      position: fixed; left: 0; top: var(--header-h);
+      height: calc(100vh - var(--header-h));
+      z-index: 50; transform: translateX(-100%);
+    }
+    #sidebar.open { transform: translateX(0); }
+    #overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 40; }
+    #overlay.open { display: block; }
+  }
+
+  /* ── Content ─────────────────────────────────────────────────────────── */
+  #content-panel {
+    flex: 1; overflow-y: auto; position: relative;
+    padding: 40px 48px;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  @media (max-width: 700px) { #content-panel { padding: 20px 16px; } }
+
+  #section-title {
+    font-size: 26px; font-weight: 700;
+    margin-bottom: 24px; line-height: 1.3;
+    color: var(--text);
+  }
+  #section-body {
+    font-size: 15px; line-height: 1.9;
+    color: #cbd5e1;
+    white-space: pre-wrap;
+    max-width: 72ch;
+    user-select: text; -webkit-user-select: text;
+  }
+
+  /* skeleton loader */
+  .skel {
+    background: linear-gradient(90deg, var(--border) 25%, #1e2530 50%, var(--border) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 6px; height: 1em; margin-bottom: 12px;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  /* ── Watermark ───────────────────────────────────────────────────────── */
+  #watermark {
+    position: fixed;
+    inset: 0; pointer-events: none; z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    transform: rotate(-25deg);
+    opacity: .045;
+    font-size: clamp(28px, 5vw, 60px);
+    font-weight: 900; letter-spacing: 4px;
+    color: #fff; white-space: nowrap;
+    text-shadow: 0 0 40px rgba(59,130,246,.6);
+    user-select: none; -webkit-user-select: none;
+  }
+
+  /* repeat watermark grid */
+  #watermark-grid {
+    position: fixed; inset: 0; pointer-events: none; z-index: 99;
+    opacity: .018;
+    background-image: repeating-linear-gradient(
+      -30deg,
+      transparent, transparent 80px,
+      rgba(255,255,255,.4) 80px, rgba(255,255,255,.4) 81px
+    );
+  }
+
+  /* ── Blocking screens ────────────────────────────────────────────────── */
+  #blocker {
+    display: none;
+    position: fixed; inset: 0; z-index: 200;
+    background: var(--bg);
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 20px; text-align: center; padding: 40px;
+  }
+  #blocker.show { display: flex; }
+  #blocker .icon { font-size: 64px; }
+  #blocker h1 { font-size: 22px; font-weight: 700; color: var(--danger); }
+  #blocker p  { font-size: 14px; color: var(--muted); max-width: 380px; line-height: 1.6; }
+  #blocker .code { font-family: monospace; font-size: 13px; color: var(--warn); }
+
+  /* ── Loading overlay ─────────────────────────────────────────────────── */
+  #loader {
+    position: fixed; inset: 0; z-index: 300;
+    background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; transition: opacity .4s;
+  }
+  #loader.hidden { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loader p { font-size: 13px; color: var(--muted); }
+
+  /* ── Print / devtools guards ─────────────────────────────────────────── */
+  @media print { body { display: none !important; } }
+</style>
+</head>
+<body>
+
+<!-- Loading screen -->
+<div id="loader">
+  <div class="spinner"></div>
+  <p id="loader-msg">Verifying license…</p>
+</div>
+
+<!-- Blocked screen -->
+<div id="blocker">
+  <div class="icon">🔒</div>
+  <h1 id="block-title">Access Denied</h1>
+  <p id="block-msg">This document license is not valid for this device.</p>
+  <div class="code" id="block-code"></div>
+</div>
+
+<div id="app">
+  <!-- Header -->
+  <div id="header">
+    <button id="hamburger" onclick="toggleSidebar()" aria-label="Menu">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="3" y1="6"  x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <div class="logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+      Secure Knowledge Base
+    </div>
+    <div class="status-pill">
+      <div class="dot" id="status-dot"></div>
+      <span id="status-txt">Verifying…</span>
+    </div>
+  </div>
+
+  <div id="layout">
+    <!-- Overlay for mobile -->
+    <div id="overlay" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div class="search-wrap">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input id="search" type="text" placeholder="Search topics…" autocomplete="off" spellcheck="false"/>
+      </div>
+      <div id="nav-list"></div>
+      <div id="user-badge">
+        Package: <strong id="uid-display">—</strong><br>
+        Device: <span id="fp-display">—</span>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div id="content-panel">
+      <div id="section-title">Select a topic</div>
+      <div id="section-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Watermarks -->
+<div id="watermark-grid"></div>
+<div id="watermark"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ── Configuration (replaced by package generator) ─────────────────────
+  var CFG = {
+    userId: '__PACKAGE_USER_ID__',
+    server: '__LICENSE_SERVER__',
+    pingInterval: 12 * 60 * 60 * 1000,   // 12 hours
+    storageKey: 'sdrmv2_bundle',
+    tokenKey:   'sdrmv2_token',
+    pingKey:    'sdrmv2_ping',
+  };
+
+  // ── State ─────────────────────────────────────────────────────────────
+  var state = {
+    token:       null,
+    fingerprint: null,
+    manifest:    [],
+    activeId:    null,
+    cache:       {},   // chunkId → decrypted text (in-memory only)
+  };
+
+  // ── Fingerprint ───────────────────────────────────────────────────────
+  function buildFingerprint() {
+    // Canvas fingerprint
+    var canvas = document.createElement('canvas');
+    var ctx    = canvas.getContext('2d');
+    ctx.textBaseline = 'top';
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#f00';
+    ctx.fillText('fp', 2, 2);
+    var canvasFp = canvas.toDataURL().slice(-30);
+
+    // WebGL fingerprint
+    var gl = canvas.getContext('webgl');
+    var glInfo = gl ? (gl.getParameter(gl.RENDERER) + gl.getParameter(gl.VENDOR)) : 'ngl';
+
+    var raw = [
+      navigator.userAgent,
+      navigator.language,
+      screen.width + 'x' + screen.height,
+      screen.colorDepth,
+      new Date().getTimezoneOffset(),
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+      navigator.hardwareConcurrency || 0,
+      (navigator.deviceMemory || 0),
+      !!window.chrome,
+      !!window.safari,
+      navigator.platform || '',
+      canvasFp,
+      glInfo.slice(0, 40),
+    ].join('|');
+
+    // Simple deterministic hash (not cryptographic — server hashes with HMAC)
+    var hash = 0;
+    for (var i = 0; i < raw.length; i++) {
+      hash = ((hash << 5) - hash) + raw.charCodeAt(i);
+      hash |= 0;
+    }
+
+    // Persistent local salt (survives reloads, lost on clear-storage)
+    var salt = localStorage.getItem('_sdrmSalt');
+    if (!salt) {
+      salt = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem('_sdrmSalt', salt);
+    }
+
+    return btoa(Math.abs(hash).toString(16) + ':' + salt + ':' + navigator.userAgent.slice(0, 20)).slice(0, 80);
+  }
+
+  // ── UI helpers ────────────────────────────────────────────────────────
+  function setLoader(msg) {
+    document.getElementById('loader-msg').textContent = msg || 'Loading…';
+  }
+
+  function hideLoader() {
+    var el = document.getElementById('loader');
+    el.classList.add('hidden');
+    setTimeout(function() { el.style.display = 'none'; }, 450);
+  }
+
+  function showBlocker(title, msg, code) {
+    document.getElementById('block-title').textContent = title;
+    document.getElementById('block-msg').textContent   = msg;
+    document.getElementById('block-code').textContent  = code ? 'Code: ' + code : '';
+    document.getElementById('blocker').classList.add('show');
+    document.getElementById('watermark').textContent = 'ACCESS DENIED';
+    document.getElementById('status-dot').className  = 'dot bad';
+    document.getElementById('status-txt').textContent = 'Denied';
+    hideLoader();
+  }
+
+  function setStatus(ok, text) {
+    document.getElementById('status-dot').className   = 'dot ' + (ok ? 'ok' : 'bad');
+    document.getElementById('status-txt').textContent = text;
+  }
+
+  function setWatermark(text) {
+    document.getElementById('watermark').textContent = text + '  ' + text + '  ' + text;
+  }
+
+  // ── API ───────────────────────────────────────────────────────────────
+  function apiPost(endpoint, body) {
+    return fetch(CFG.server + endpoint, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(e) { throw e; });
+      return r.json();
+    });
+  }
+
+  // ── License flow ──────────────────────────────────────────────────────
+  function activate() {
+    setLoader('Activating license…');
+    return apiPost('/api/license/activate', {
+      userId:      CFG.userId,
+      fingerprint: state.fingerprint,
+    }).then(function(res) {
+      if (!res.allowed) {
+        showBlocker(
+          res.code === 'DEVICE_LIMIT' ? 'Device Limit Reached' :
+          res.code === 'BANNED'       ? 'Access Revoked'       : 'Access Denied',
+          res.reason,
+          res.code
+        );
+        throw new Error(res.code);
+      }
+      state.token = res.token;
+      localStorage.setItem(CFG.tokenKey, res.token);
+      localStorage.setItem(CFG.pingKey, Date.now().toString());
+      return res;
+    });
+  }
+
+  function ping() {
+    return apiPost('/api/license/ping', {
+      token:       state.token,
+      fingerprint: state.fingerprint,
+    }).then(function(res) {
+      if (!res.allowed) {
+        showBlocker('Session Revoked', res.reason, res.code);
+        return;
+      }
+      state.token = res.token;
+      localStorage.setItem(CFG.tokenKey, res.token);
+      localStorage.setItem(CFG.pingKey, Date.now().toString());
+      setStatus(true, 'License valid');
+    }).catch(function() {
+      // Network error — allow offline grace if we have a cached token
+      setStatus(false, 'Offline mode');
+    });
+  }
+
+  function schedulePing() {
+    var lastPing = parseInt(localStorage.getItem(CFG.pingKey) || '0');
+    var due      = Math.max(0, CFG.pingInterval - (Date.now() - lastPing));
+    setTimeout(function() {
+      ping().then(function() { schedulePing(); });
+    }, due);
+  }
+
+  function fetchChunk(chunkId) {
+    if (state.cache[chunkId]) return Promise.resolve(state.cache[chunkId]);
+    return apiPost('/api/license/chunk', {
+      token:       state.token,
+      fingerprint: state.fingerprint,
+      chunkId:     chunkId,
+    }).then(function(res) {
+      state.cache[chunkId] = res;
+      return res;
+    });
+  }
+
+  // ── Navigation ────────────────────────────────────────────────────────
+  function renderNav(filter) {
+    var list = document.getElementById('nav-list');
+    list.innerHTML = '';
+    var items = filter
+      ? state.manifest.filter(function(s) { return s.title.toLowerCase().indexOf(filter.toLowerCase()) !== -1; })
+      : state.manifest;
+
+    items.forEach(function(sec) {
+      var div = document.createElement('div');
+      div.className = 'nav-item' + (sec.id === state.activeId ? ' active' : '');
+      div.innerHTML =
+        '<div class="title">' + escHtml(sec.title) + '</div>' +
+        '<div class="meta"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>encrypted section</div>';
+      div.onclick = function() {
+        selectSection(sec.id);
+        if (window.innerWidth <= 700) toggleSidebar();
+      };
+      list.appendChild(div);
+    });
+  }
+
+  function selectSection(id) {
+    state.activeId = id;
+    renderNav(document.getElementById('search').value);
+
+    var titleEl = document.getElementById('section-title');
+    var bodyEl  = document.getElementById('section-body');
+
+    // Skeleton loader
+    titleEl.innerHTML = '<div class="skel" style="width:60%;height:26px"></div>';
+    bodyEl.innerHTML  = [1,2,3,4,5,6].map(function(i) {
+      return '<div class="skel" style="width:' + (70 + Math.random()*28|0) + '%;margin-bottom:14px"></div>';
+    }).join('');
+
+    fetchChunk(id).then(function(res) {
+      titleEl.textContent = res.title;
+      bodyEl.textContent  = res.content;
+    }).catch(function(err) {
+      if (err && (err.code === 'DENIED' || err.code === 'FP_MISMATCH' || err.code === 'TOKEN_INVALID')) {
+        showBlocker('Access Revoked', 'Your session is no longer valid.', err.code);
+        return;
+      }
+      titleEl.textContent = 'Error loading section';
+      bodyEl.textContent  = 'Could not decrypt content. Check your connection and reload.';
+    });
+  }
+
+  // ── Manifest ──────────────────────────────────────────────────────────
+  function loadManifest() {
+    // Try local manifest.json first (bundled in package ZIP)
+    return fetch('./manifest.json')
+      .then(function(r) { return r.ok ? r.json() : Promise.reject(); })
+      .catch(function() {
+        // Fallback: hardcoded demo manifest
+        return [
+          { id: 'sec1', title: 'Инфекционные болезни / Патоморфология' },
+          { id: 'sec2', title: 'Онкология / Опухоли' },
+          { id: 'sec3', title: 'Сердечно-сосудистые заболевания' },
+          { id: 'sec4', title: 'Дыхательная система' },
+          { id: 'sec5', title: 'Фармакология' },
+        ];
+      });
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  window.toggleSidebar = function() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('overlay').classList.toggle('open');
+  };
+
+  // ── Anti-devtools (soft deterrent only) ──────────────────────────────
+  (function() {
+    var threshold = 160;
+    setInterval(function() {
+      var w = window.outerWidth  - window.innerWidth;
+      var h = window.outerHeight - window.innerHeight;
+      if (w > threshold || h > threshold) {
+        document.getElementById('section-body').textContent = '';
+      }
+    }, 1000);
+
+    // Disable right-click
+    document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+    // Disable common save shortcuts
+    document.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && ['s','p','u'].indexOf(e.key.toLowerCase()) !== -1) {
+        e.preventDefault();
+      }
+    });
+  })();
+
+  // ── Main ──────────────────────────────────────────────────────────────
+  function main() {
+    state.fingerprint = buildFingerprint();
+
+    document.getElementById('uid-display').textContent = CFG.userId;
+    document.getElementById('fp-display').textContent  = state.fingerprint.slice(0, 12) + '…';
+    setWatermark(CFG.userId);
+
+    // Check if we have a cached token that might still be valid
+    var cachedToken = localStorage.getItem(CFG.tokenKey);
+    if (cachedToken) state.token = cachedToken;
+
+    setLoader('Loading document index…');
+    loadManifest().then(function(manifest) {
+      state.manifest = manifest;
+      renderNav();
+
+      // Search
+      document.getElementById('search').addEventListener('input', function() {
+        renderNav(this.value);
+      });
+
+      setLoader('Verifying device license…');
+      return activate();
+    }).then(function() {
+      setStatus(true, 'License valid');
+      hideLoader();
+      schedulePing();
+
+      // Auto-select first section
+      if (state.manifest.length > 0) selectSection(state.manifest[0].id);
+    }).catch(function(e) {
+      if (!document.getElementById('blocker').classList.contains('show')) {
+        showBlocker('Connection Error', 'Could not reach the license server. Check your internet and reload.', 'NET_ERR');
+      }
+    });
+  }
+
+  // Wait for DOM
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', main);
+  } else {
+    main();
+  }
+
+})();
+</script>
+</body>
+</html>
