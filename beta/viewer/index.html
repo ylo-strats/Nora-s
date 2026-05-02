@@ -19,6 +19,12 @@
     --success:  #22c55e;
     --sidebar-w: 300px;
     --header-h:  56px;
+    /* Watermark tuning: raise opacity for stronger marks, lower for softer marks. */
+    --wm-main-opacity: .12;
+    --wm-tiles-opacity: .17;
+    --wm-grid-opacity: .018;
+    --wm-main-size: clamp(22px, 3.6vw, 42px);
+    --wm-tile-size: 10px;
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -262,8 +268,8 @@
     inset: 0; pointer-events: none; z-index: 120;
     display: flex; align-items: center; justify-content: center;
     transform: rotate(-25deg);
-    opacity: .08;
-    font-size: clamp(22px, 3.6vw, 42px);
+    opacity: var(--wm-main-opacity);
+    font-size: var(--wm-main-size);
     font-weight: 900; letter-spacing: 4px;
     color: rgba(15, 23, 42, .52); white-space: nowrap;
     mix-blend-mode: multiply;
@@ -280,14 +286,14 @@
     grid-template-columns: repeat(4, minmax(240px, 1fr));
     gap: 56px 34px;
     transform: rotate(-24deg);
-    opacity: .13;
+    opacity: var(--wm-tiles-opacity);
     mix-blend-mode: multiply;
     user-select: none;
     -webkit-user-select: none;
   }
   .wm-tile {
     color: rgba(15,23,42,.58);
-    font: 700 10px/1.35 "Segoe UI", system-ui, sans-serif;
+    font: 700 var(--wm-tile-size)/1.35 "Segoe UI", system-ui, sans-serif;
     letter-spacing: .06em;
     text-transform: uppercase;
     white-space: pre-line;
@@ -313,7 +319,7 @@
   /* repeat watermark grid */
   #watermark-grid {
     position: fixed; inset: 0; pointer-events: none; z-index: 119;
-    opacity: .022;
+    opacity: var(--wm-grid-opacity);
     background-image: repeating-linear-gradient(
       -30deg,
       transparent, transparent 80px,
@@ -441,6 +447,7 @@
     tokenKey:   'sdrmv2_token',
     pingKey:    'sdrmv2_ping',
   };
+  var WM_TILE_COUNT = 40;
 
   var params = new URLSearchParams(window.location.search);
   if (CFG.userId.indexOf('__PACKAGE_USER_ID__') !== -1) {
@@ -536,28 +543,23 @@
   }
 
   function watermarkText() {
-    return [
-      CFG.userId,
-      'DEVICE ' + state.fingerprint.slice(0, 14),
-      location.hostname,
-    ].join('  |  ');
+    return CFG.userId || 'USER';
   }
 
   function setWatermark() {
     var text = watermarkText();
-    document.getElementById('watermark').textContent = text + '  ' + text;
+    document.getElementById('watermark').textContent = text;
     renderWatermarkTiles(text);
   }
 
   function renderWatermarkTiles(text) {
     var el = document.getElementById('watermark-tiles');
-    var shortText = text.replace(/\s+\|\s+/g, '\n');
     var tiles = [];
-    for (var i = 0; i < 40; i++) {
+    for (var i = 0; i < WM_TILE_COUNT; i++) {
       var shift = (i % 5) * 7;
       tiles.push(
         '<div class="wm-tile" style="transform:translateX(' + shift + 'px)">' +
-        escHtml(shortText) +
+        escHtml(text) +
         '</div>'
       );
     }

@@ -140,6 +140,11 @@
   .toast.show { transform: translateY(0); opacity: 1; }
   .toast.ok  { border-color: var(--success); color: var(--success); }
   .toast.err { border-color: var(--danger);  color: var(--danger); }
+  .auto-refresh-status {
+    color: var(--success);
+    font-size: 12px;
+    white-space: nowrap;
+  }
 </style>
 </head>
 <body>
@@ -175,6 +180,7 @@
     </svg>
     <h1>SecureDRM Admin Console</h1>
     <span class="spacer"></span>
+    <span class="auto-refresh-status" id="auto-refresh-status">Auto refresh: off</span>
     <span class="server-url-display" id="server-url-display"></span>
     <button class="btn-ghost btn-sm" onclick="loadStats()">↻ Refresh</button>
     <button class="btn-ghost btn-sm" onclick="logout()">Logout</button>
@@ -308,12 +314,37 @@
 
   var cfg = { server: '', secret: '' };
   var stats = null;
+  var autoRefreshTimer = null;
+  var autoRefreshMs = 5000;
+  var openDevicesUserId = null;
 
   function normalizeServerUrl(value) {
     var server = value.trim();
     if (!server) return window.location.origin;
     if (!/^https?:\/\//i.test(server)) server = 'https://' + server;
     return server.replace(/\/$/, '');
+  }
+
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    autoRefreshTimer = setInterval(function() {
+      if (!cfg.secret || document.hidden) return;
+      loadStats({ silent: true });
+    }, autoRefreshMs);
+    setAutoRefreshStatus('Auto refresh: ' + Math.round(autoRefreshMs / 1000) + 's');
+  }
+
+  function stopAutoRefresh() {
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+    setAutoRefreshStatus('Auto refresh: off');
+  }
+
+  function setAutoRefreshStatus(text) {
+    var el = document.getElementById('auto-refresh-status');
+    if (el) el.textContent = text;
   }
 
   // ── Auth ────────────────────────────────────────────────────────────
@@ -329,12 +360,14 @@
       document.getElementById('admin-app').classList.add('show');
       document.getElementById('server-url-display').textContent = cfg.server;
       loadStats();
+      startAutoRefresh();
     }).catch(function(e) {
       showAuthErr('Connection failed: ' + (e.message || 'Check server URL and secret.'));
     });
   };
 
   window.logout = function() {
+    stopAutoRefresh();
     cfg.server = ''; cfg.secret = '';
     document.getElementById('admin-app').classList.remove('show');
     document.getElementById('auth-screen').style.display = 'flex';
@@ -362,8 +395,9 @@
   }
 
   // ── Stats ───────────────────────────────────────────────────────────
-  window.loadStats = function() {
-    api('GET', '/api/admin/stats').then(function(data) {
+  window.loadStats = function(options) {
+    options = options || {};
+    return api('GET', '/api/admin/stats').then(function(data) {
       stats = data;
       document.getElementById('st-issued').textContent     = data.totalIssued;
       document.getElementById('st-active').textContent     = data.totalActive;
@@ -375,7 +409,10 @@
       document.getElementById('cfg-max-dev').value         = data.config.maxDevicesPerUser;
       renderUsers(data.users);
       renderLog(data.suspiciousLog);
-    }).catch(function(e) { toast('Failed to load stats: ' + e.message, true); });
+      if (openDevicesUserId) renderDeviceRows(openDevicesUserId);
+    }).catch(function(e) {
+      if (!options.silent) toast('Failed to load stats: ' + e.message, true);
+    });
   };
 
   // ── Users table ──────────────────────────────────────────────────────
@@ -421,6 +458,11 @@
 
   // ── Devices detail ───────────────────────────────────────────────────
   window.showDevices = function(uid) {
+    openDevicesUserId = uid;
+    renderDeviceRows(uid);
+  };
+
+  function renderDeviceRows(uid) {
     if (!stats) return;
     var user = stats.users.find(function(u) { return u.id === uid; });
     if (!user) return;
@@ -435,9 +477,10 @@
         '<td><button class="btn-danger btn-sm" onclick="revokeDevice(\'' + uid + '\',\'' + d.fpHash + '\')">Revoke</button></td>' +
         '</tr>';
     }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No devices registered</td></tr>';
-  };
+  }
 
   window.closeDevices = function() {
+    openDevicesUserId = null;
     document.getElementById('devices-panel').style.display = 'none';
   };
 
@@ -510,6 +553,10 @@
     if (e.key === 'Enter' && document.getElementById('auth-screen').style.display !== 'none') {
       connectAdmin();
     }
+  });
+
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden && cfg.secret) loadStats({ silent: true });
   });
 
   document.getElementById('inp-server').value = window.location.origin;
