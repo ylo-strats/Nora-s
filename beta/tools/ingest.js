@@ -193,17 +193,21 @@ function renderDocxXmlToHtml(documentXml) {
   for (const pXml of paragraphs) {
     const pPr = tag(pXml, 'w:pPr');
     const styleId = attr(tagOpen(pPr, 'w:pStyle'), 'w:val');
-    const isHeading = styleId === '1' || /^Heading1$/i.test(styleId);
-    const isList = /<w:numPr\b/.test(pPr) && !isHeading;
+    const isHeading1 = styleId === '1' || /^Heading1$/i.test(styleId);
+    const isHeading2 = styleId === '2' || /^Heading2$/i.test(styleId);
+    const isList = /<w:numPr\b/.test(pPr) && !isHeading1 && !isHeading2;
     const inheritedStyle = runStyleFromXml(tag(pPr, 'w:rPr'));
     const runs = pXml.match(/<w:r\b[\s\S]*?<\/w:r>/g) || [];
     const content = runs.map(r => renderRun(r, inheritedStyle)).join('').trim();
 
     if (!content) continue;
 
-    if (isHeading) {
+    if (isHeading1) {
       closeList();
       html.push(`<h1>${content}</h1>`);
+    } else if (isHeading2) {
+      closeList();
+      html.push(`<h2>${content}</h2>`);
     } else if (isList) {
       if (!listOpen) {
         html.push('<ul>');
@@ -223,25 +227,46 @@ function renderDocxXmlToHtml(documentXml) {
 function splitHtmlByHeadings(html) {
   const matches = Array.from(html.matchAll(/<h1[^>]*>[\s\S]*?<\/h1>/gi));
   if (!matches.length) {
+    const content = addSubheadingIds(html, 'sec1');
     return [{
       id: 'sec1',
       title: stripTags(html).slice(0, 80) || 'Document',
-      content: html,
+      content: content.html,
+      children: content.children,
       format: 'html',
     }];
   }
 
   return matches.map((match, i) => {
+    const id = `sec${i + 1}`;
     const start = match.index;
     const end = i + 1 < matches.length ? matches[i + 1].index : html.length;
     const sectionHtml = html.slice(start, end).trim();
+    const content = addSubheadingIds(sectionHtml, id);
     return {
-      id: `sec${i + 1}`,
+      id,
       title: stripTags(match[0]) || `Section ${i + 1}`,
-      content: sectionHtml,
+      content: content.html,
+      children: content.children,
       format: 'html',
     };
   });
+}
+
+function addSubheadingIds(html, sectionId) {
+  let index = 0;
+  const children = [];
+  const output = html.replace(/<h2\b([^>]*)>([\s\S]*?)<\/h2>/gi, (full, attrs, content) => {
+    index++;
+    const id = `${sectionId}-sub${index}`;
+    children.push({ id, title: stripTags(content) || `Subheading ${index}` });
+    const cleanAttrs = attrs
+      .replace(/\s+id="[^"]*"/i, '')
+      .replace(/\s+data-nav-id="[^"]*"/i, '');
+    return `<h2${cleanAttrs} id="doc-${id}" data-nav-id="${id}">${content}</h2>`;
+  });
+
+  return { html: output, children };
 }
 
 async function extractDocx(filePath) {
@@ -305,7 +330,7 @@ async function main() {
     const id         = sec.id || `sec${Object.keys(chunks).length + 1}`;
     const ciphertext = aesEncrypt(sec.content || '');
     chunks[id]       = { title: sec.title, format: sec.format || 'text', ciphertext };
-    manifest.push({ id, title: sec.title });
+    manifest.push({ id, title: sec.title, children: sec.children || [] });
     process.stdout.write(`  ✓ ${id}: ${sec.title.slice(0, 50)}\n`);
   }
 

@@ -109,6 +109,17 @@
   .nav-item:hover  { background: rgba(59,130,246,.08); }
   .nav-item.active { background: rgba(59,130,246,.15); border-color: rgba(59,130,246,.3); }
   .nav-item .title { font-size: 12px; font-weight: 500; line-height: 1.35; }
+  .nav-item.subheading {
+    margin-left: 14px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+    border-left: 1px solid rgba(100,116,139,.35);
+    border-radius: 0 8px 8px 0;
+  }
+  .nav-item.subheading .title {
+    font-size: 11px;
+    color: #a7b2c3;
+  }
 
   #user-badge {
     padding: 12px;
@@ -182,11 +193,10 @@
   .doc-shell h2 { font-size: 20px; }
   .doc-shell h3 { font-size: 18px; }
   .doc-shell p { margin: 0 0 12px; }
-  .doc-shell strong {
-    color: #111827;
-  }
-  .doc-shell em {
-    color: #334155;
+  .doc-shell strong,
+  .doc-shell em,
+  .doc-shell u {
+    color: inherit;
   }
   .doc-shell span[style*="color"],
   .doc-shell font[color] {
@@ -200,6 +210,12 @@
     color: inherit;
     padding: 0 .12em;
     border-radius: 2px;
+  }
+  .doc-shell h2[data-nav-id] {
+    border-left: 4px solid #3b82f6;
+    padding-left: 12px;
+    margin-top: 26px;
+    color: inherit;
   }
   .doc-shell ul, .doc-shell ol { margin: 0 0 12px 28px; padding: 0; }
   .doc-shell li { margin: 0 0 8px; }
@@ -557,27 +573,45 @@
   function renderNav(filter) {
     var list = document.getElementById('nav-list');
     list.innerHTML = '';
-    var items = filter
-      ? state.manifest.filter(function(s) { return s.title.toLowerCase().indexOf(filter.toLowerCase()) !== -1; })
-      : state.manifest;
+    var items = flattenNavItems(state.manifest);
+    if (filter) {
+      var needle = filter.toLowerCase();
+      items = items.filter(function(item) {
+        return item.title.toLowerCase().indexOf(needle) !== -1;
+      });
+    }
 
-    items.forEach(function(sec) {
+    items.forEach(function(item) {
       var div = document.createElement('div');
-      div.className = 'nav-item' + (sec.id === state.activeId ? ' active' : '');
-      div.innerHTML = '<div class="title">' + escHtml(sec.title) + '</div>';
+      div.className =
+        'nav-item' +
+        (item.level > 1 ? ' subheading' : '') +
+        (item.id === state.activeId ? ' active' : '');
+      div.innerHTML = '<div class="title">' + escHtml(item.title) + '</div>';
       div.onclick = function() {
-        scrollToSection(sec.id);
+        scrollToSection(item.id);
         if (window.innerWidth <= 700) toggleSidebar();
       };
       list.appendChild(div);
     });
   }
 
+  function flattenNavItems(manifest) {
+    var items = [];
+    manifest.forEach(function(sec) {
+      items.push({ id: sec.id, title: sec.title, level: 1 });
+      (sec.children || []).forEach(function(child) {
+        items.push({ id: child.id, title: child.title, level: 2 });
+      });
+    });
+    return items;
+  }
+
   function scrollToSection(id) {
     state.activeId = id;
     renderNav(document.getElementById('search').value);
-    var section = document.getElementById('doc-' + id);
-    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    var target = document.getElementById('doc-' + id);
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function setActiveSection(id) {
@@ -662,7 +696,7 @@
       ? section.chunk.content
       : '<div class="plain-doc">' + escHtml(section.chunk.content) + '</div>';
     return '<section id="doc-' + escHtml(section.id) + '" class="doc-section">' +
-      '<article class="doc-shell" draggable="false">' + content + '</article>' +
+      '<article class="doc-shell" draggable="false" data-nav-id="' + escHtml(section.id) + '">' + content + '</article>' +
       '</section>';
   }
 
@@ -672,7 +706,7 @@
 
     function updateActive() {
       ticking = false;
-      var sections = Array.prototype.slice.call(document.querySelectorAll('.doc-section'));
+      var sections = Array.prototype.slice.call(document.querySelectorAll('[data-nav-id]'));
       var panelTop = panel.getBoundingClientRect().top;
       var best = sections[0];
       var bestDistance = Infinity;
@@ -685,7 +719,7 @@
         }
       });
 
-      if (best) setActiveSection(best.id.replace(/^doc-/, ''));
+      if (best) setActiveSection(best.getAttribute('data-nav-id'));
     }
 
     panel.onscroll = function() {
