@@ -51,9 +51,15 @@ npm start
 > ⚠️ The three secrets must be identical between the server and the ingestion tool.
 > If CONTENT_KEY changes, re-run ingest to re-encrypt content.
 
-**Railway persistence:** create a Railway Volume mounted at `/data` and set
-`DATA_DIR=/data`. User IDs, registered devices, bans, and access counters are
-stored in `db.json` inside that directory, so they survive restarts and redeploys.
+**Railway persistence:** create a Railway Volume mounted at `/data`.
+The server now automatically uses `/data/db.json` when that volume exists.
+You can also set `DATA_DIR=/data` explicitly in Railway variables.
+User IDs, registered devices, bans, font settings, and access counters are
+stored in that `db.json`, so they survive restarts and redeploys.
+
+If users disappear after redeploy, the Railway Volume is not mounted to this
+service yet. Add a Volume in the Railway service settings, mount it as `/data`,
+then redeploy once.
 
 ---
 
@@ -131,6 +137,7 @@ Open `admin/index.html` in any browser. Enter your server URL and admin secret.
 - Revoke individual device slots (frees a slot for re-activation)
 - Issue new user IDs
 - Adjust max users and max devices per user globally
+- Change the document font shown to users
 - Monitor suspicious activity log (unknown packages, device limit violations, etc.)
 
 ---

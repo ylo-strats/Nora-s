@@ -31,18 +31,64 @@ const PUBLIC_USER_ID = normalizeUserId(process.env.PUBLIC_USER_ID || 'USER-001')
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const LEGACY_DATA_DIR = path.join(__dirname, 'data');
+const DEFAULT_CONFIG = {
+  maxUsers: 20,
+  maxDevicesPerUser: 2,
+  docFont: 'times',
+};
+const VIEWER_FONTS = {
+  times:   { label: 'Times New Roman', css: '"Times New Roman", Georgia, serif' },
+  georgia: { label: 'Georgia', css: 'Georgia, "Times New Roman", serif' },
+  arial:   { label: 'Arial', css: 'Arial, Helvetica, sans-serif' },
+  verdana: { label: 'Verdana', css: 'Verdana, Geneva, sans-serif' },
+  system:  { label: 'System UI', css: '"Segoe UI", system-ui, sans-serif' },
+};
+
+function resolveDataDir() {
+  if (process.env.DATA_DIR) return process.env.DATA_DIR;
+  if (fs.existsSync('/data')) return '/data';
+  return LEGACY_DATA_DIR;
+}
+
+const DATA_DIR = resolveDataDir();
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const CHUNKS_FILE = path.join(__dirname, 'data', 'chunks.json');
 const MANIFEST_FILE = path.join(__dirname, 'data', 'manifest.json');
 fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
+
+function migrateLegacyDBIfNeeded() {
+  const legacyFile = path.join(LEGACY_DATA_DIR, 'db.json');
+  if (DB_FILE === legacyFile || fs.existsSync(DB_FILE) || !fs.existsSync(legacyFile)) return;
+  fs.copyFileSync(legacyFile, DB_FILE);
+  console.log(`[SecureDRM] Migrated DB from ${legacyFile} to ${DB_FILE}`);
+}
+
+function normalizeConfig(config = {}) {
+  const next = { ...DEFAULT_CONFIG, ...config };
+  next.maxUsers = Math.max(1, parseInt(next.maxUsers) || DEFAULT_CONFIG.maxUsers);
+  next.maxDevicesPerUser = Math.max(1, parseInt(next.maxDevicesPerUser) || DEFAULT_CONFIG.maxDevicesPerUser);
+  if (!VIEWER_FONTS[next.docFont]) next.docFont = DEFAULT_CONFIG.docFont;
+  return next;
+}
+
+function viewerConfig() {
+  const font = VIEWER_FONTS[db.config.docFont] || VIEWER_FONTS[DEFAULT_CONFIG.docFont];
+  return {
+    docFont: db.config.docFont,
+    docFontLabel: font.label,
+    docFontFamily: font.css,
+  };
+}
+
+migrateLegacyDBIfNeeded();
 
 function loadDB() {
   if (fs.existsSync(DB_FILE)) {
     try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch {}
   }
   return {
-    config: { maxUsers: 20, maxDevicesPerUser: 2 },
+    config: { ...DEFAULT_CONFIG },
     users: {},
     suspiciousLog: [],
   };
@@ -55,6 +101,10 @@ function saveDB(db) {
 }
 
 let db = loadDB();
+db.config = normalizeConfig(db.config);
+db.users = db.users || {};
+db.suspiciousLog = db.suspiciousLog || [];
+saveDB(db);
 
 // ─── Crypto helpers ───────────────────────────────────────────────────────────
 
@@ -208,7 +258,12 @@ app.post('/api/license/activate', apiLimiter, (req, res) => {
   user.accessCount = (user.accessCount || 0) + 1;
   saveDB(db);
 
-  return res.json({ allowed: true, token: issueToken(uid, fpHash), userId: uid });
+  return res.json({
+    allowed: true,
+    token: issueToken(uid, fpHash),
+    userId: uid,
+    viewerConfig: viewerConfig(),
+  });
 });
 
 // POST /api/license/ping  { token, fingerprint }
@@ -241,7 +296,7 @@ app.post('/api/license/ping', apiLimiter, (req, res) => {
   user.lastSeen = now();
   saveDB(db);
 
-  return res.json({ allowed: true, token: issueToken(userId, fpHash) });
+  return res.json({ allowed: true, token: issueToken(userId, fpHash), viewerConfig: viewerConfig() });
 });
 
 // POST /api/license/chunk  { token, fingerprint, chunkId }
@@ -291,6 +346,8 @@ app.get('/api/admin/stats', adminLimiter, requireAdmin, (req, res) => {
   }));
   res.json({
     config:        db.config,
+    viewerFonts:   Object.fromEntries(Object.entries(VIEWER_FONTS).map(([id, font]) => [id, font.label])),
+    dataFile:      DB_FILE,
     totalIssued:   users.length,
     totalActive:   users.filter(u => !u.banned && u.deviceCount > 0).length,
     totalBanned:   users.filter(u => u.banned).length,
@@ -327,9 +384,11 @@ app.get('/api/admin/content-status', adminLimiter, requireAdmin, (req, res) => {
 });
 
 app.post('/api/admin/config', adminLimiter, requireAdmin, (req, res) => {
-  const { maxUsers, maxDevicesPerUser } = req.body || {};
+  const { maxUsers, maxDevicesPerUser, docFont } = req.body || {};
   if (maxUsers !== undefined)          db.config.maxUsers          = Math.max(1, parseInt(maxUsers));
   if (maxDevicesPerUser !== undefined) db.config.maxDevicesPerUser = Math.max(1, parseInt(maxDevicesPerUser));
+  if (docFont !== undefined && VIEWER_FONTS[docFont]) db.config.docFont = docFont;
+  db.config = normalizeConfig(db.config);
   saveDB(db);
   res.json({ ok: true, config: db.config });
 });

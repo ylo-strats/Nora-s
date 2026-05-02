@@ -91,12 +91,12 @@
   .badge.neutral { background: rgba(100,116,139,.15); color: var(--muted); }
 
   /* ── Controls ─────────────────────────────────────────────────────── */
-  input[type=text], input[type=password], input[type=number] {
+  input[type=text], input[type=password], input[type=number], select {
     background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
     color: var(--text); padding: 8px 12px; font-size: 13px; outline: none;
     transition: border-color .2s; width: 100%;
   }
-  input:focus { border-color: var(--accent); }
+  input:focus, select:focus { border-color: var(--accent); }
 
   button {
     padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
@@ -230,6 +230,10 @@
             <div>
               <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Max Devices / User</label>
               <input type="number" id="cfg-max-dev" min="1" max="10" placeholder="e.g. 2"/>
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Document Font</label>
+              <select id="cfg-doc-font"></select>
             </div>
           </div>
           <button class="btn-primary" onclick="saveConfig()">Save Config</button>
@@ -407,6 +411,7 @@
       document.getElementById('st-maxdev').textContent     = data.config.maxDevicesPerUser;
       document.getElementById('cfg-max-users').value       = data.config.maxUsers;
       document.getElementById('cfg-max-dev').value         = data.config.maxDevicesPerUser;
+      renderFontOptions(data.viewerFonts || {}, data.config.docFont);
       renderUsers(data.users);
       renderLog(data.suspiciousLog);
       if (openDevicesUserId) renderDeviceRows(openDevicesUserId);
@@ -414,6 +419,24 @@
       if (!options.silent) toast('Failed to load stats: ' + e.message, true);
     });
   };
+
+  function renderFontOptions(fonts, selected) {
+    var el = document.getElementById('cfg-doc-font');
+    if (!el) return;
+    var current = selected || el.value || 'times';
+    el.innerHTML = Object.keys(fonts).map(function(id) {
+      return '<option value="' + esc(id) + '"' + (id === current ? ' selected' : '') + '>' + esc(fonts[id]) + '</option>';
+    }).join('');
+    if (!el.innerHTML) {
+      el.innerHTML =
+        '<option value="times">Times New Roman</option>' +
+        '<option value="georgia">Georgia</option>' +
+        '<option value="arial">Arial</option>' +
+        '<option value="verdana">Verdana</option>' +
+        '<option value="system">System UI</option>';
+      el.value = current;
+    }
+  }
 
   // ── Users table ──────────────────────────────────────────────────────
   function renderUsers(users) {
@@ -495,8 +518,9 @@
   window.saveConfig = function() {
     var maxUsers = parseInt(document.getElementById('cfg-max-users').value);
     var maxDev   = parseInt(document.getElementById('cfg-max-dev').value);
+    var docFont  = document.getElementById('cfg-doc-font').value;
     if (isNaN(maxUsers) || isNaN(maxDev)) { toast('Invalid values', true); return; }
-    api('POST', '/api/admin/config', { maxUsers: maxUsers, maxDevicesPerUser: maxDev })
+    api('POST', '/api/admin/config', { maxUsers: maxUsers, maxDevicesPerUser: maxDev, docFont: docFont })
       .then(function() { toast('Config saved'); loadStats(); })
       .catch(function(e) { toast(e.message, true); });
   };
