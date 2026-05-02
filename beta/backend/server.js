@@ -7,6 +7,7 @@
  *   CONTENT_KEY        - 32-char AES key for content encryption
  *   TOKEN_SECRET       - HMAC secret for signed session tokens
  *   ALLOWED_ORIGINS    - Comma-separated allowed CORS origins
+ *   DATA_DIR           - Persistent DB directory (Railway Volume mount, e.g. /data)
  *   PORT               - Server port (default 3001)
  */
 
@@ -30,7 +31,8 @@ const PUBLIC_USER_ID = normalizeUserId(process.env.PUBLIC_USER_ID || 'USER-001')
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
-const DB_FILE = path.join(__dirname, 'data', 'db.json');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const DB_FILE = path.join(DATA_DIR, 'db.json');
 const CHUNKS_FILE = path.join(__dirname, 'data', 'chunks.json');
 const MANIFEST_FILE = path.join(__dirname, 'data', 'manifest.json');
 fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
@@ -47,7 +49,9 @@ function loadDB() {
 }
 
 function saveDB(db) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  const tmpFile = DB_FILE + '.tmp';
+  fs.writeFileSync(tmpFile, JSON.stringify(db, null, 2));
+  fs.renameSync(tmpFile, DB_FILE);
 }
 
 let db = loadDB();

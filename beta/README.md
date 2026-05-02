@@ -40,6 +40,7 @@ export ADMIN_SECRET="your-strong-admin-secret-here"
 export TOKEN_SECRET="your-strong-token-secret-here"
 export CONTENT_KEY="exactly-32-chars-content-key!!!"   # must be 32 chars
 export ALLOWED_ORIGINS="https://your-domain.com"
+export DATA_DIR="/data"                                # Railway Volume mount for persistent users
 export PORT=3001
 
 npm start
@@ -49,6 +50,10 @@ npm start
 
 > ⚠️ The three secrets must be identical between the server and the ingestion tool.
 > If CONTENT_KEY changes, re-run ingest to re-encrypt content.
+
+**Railway persistence:** create a Railway Volume mounted at `/data` and set
+`DATA_DIR=/data`. User IDs, registered devices, bans, and access counters are
+stored in `db.json` inside that directory, so they survive restarts and redeploys.
 
 ---
 
