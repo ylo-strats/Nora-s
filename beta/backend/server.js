@@ -25,7 +25,7 @@ const PORT = process.env.PORT || 3001;
 
 const ADMIN_SECRET = process.env.ADMIN_SECRET  || 'CHANGE_ME_ADMIN_SECRET_32CHARS!!';
 const TOKEN_SECRET = process.env.TOKEN_SECRET  || 'CHANGE_ME_TOKEN_SECRET_32CHARS!!';
-const CONTENT_KEY  = process.env.CONTENT_KEY   || 'CHANGE_ME_CONTENT_KEY_32CHARS!!!';
+const CONTENT_KEY  = process.env.CONTENT_KEY   || 'KsuvxqjyDvvk6vNGdJmQSwANw4MzhgHL';
 const PUBLIC_USER_ID = normalizeUserId(process.env.PUBLIC_USER_ID || 'USER-001');
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
