@@ -28,7 +28,7 @@ const path   = require('path');
 let mammoth;
 try { mammoth = require('mammoth'); } catch {}
 
-const CONTENT_KEY = process.env.CONTENT_KEY || 'CHANGE_ME_CONTENT_KEY_32CHARS!!!';
+const CONTENT_KEY = process.env.CONTENT_KEY || 'KsuvxqjyDvvk6vNGdJmQSwANw4MzhgHL';
 
 function aesEncrypt(plaintext) {
   const key    = Buffer.from(CONTENT_KEY.slice(0, 32).padEnd(32, '0'), 'utf8');
