@@ -143,11 +143,66 @@
     color: var(--text);
   }
   #section-body {
-    font-size: 15px; line-height: 1.9;
     color: #cbd5e1;
+    user-select: none; -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  #section-body, #section-body * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -ms-user-select: none !important;
+  }
+  .doc-shell {
+    max-width: 920px;
+    margin: 0 auto 40px;
+    background: #f8fafc;
+    color: #111827;
+    border: 1px solid #d8dee9;
+    box-shadow: 0 24px 80px rgba(0,0,0,.28);
+    padding: clamp(28px, 5vw, 72px);
+    min-height: 1180px;
+    font-family: "Times New Roman", Georgia, serif;
+    font-size: 16px;
+    line-height: 1.55;
+    overflow-wrap: break-word;
+  }
+  .doc-shell h1, .doc-shell h2, .doc-shell h3 {
+    color: #0f172a;
+    line-height: 1.25;
+    margin: 0 0 18px;
+  }
+  .doc-shell h1 { font-size: 24px; text-align: center; }
+  .doc-shell h2 { font-size: 20px; }
+  .doc-shell h3 { font-size: 18px; }
+  .doc-shell p { margin: 0 0 12px; }
+  .doc-shell ul, .doc-shell ol { margin: 0 0 12px 28px; padding: 0; }
+  .doc-shell li { margin: 0 0 8px; }
+  .doc-shell table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+  }
+  .doc-shell td, .doc-shell th {
+    border: 1px solid #94a3b8;
+    padding: 6px 8px;
+    vertical-align: top;
+  }
+  .doc-shell img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 16px auto;
+    pointer-events: none;
+  }
+  .doc-shell mark, .doc-shell .highlight {
+    background: #fef08a;
+    color: inherit;
+  }
+  .plain-doc {
     white-space: pre-wrap;
+    font-size: 15px;
+    line-height: 1.9;
     max-width: 72ch;
-    user-select: text; -webkit-user-select: text;
   }
 
   /* skeleton loader */
@@ -511,7 +566,7 @@
 
     fetchChunk(id).then(function(res) {
       titleEl.textContent = res.title;
-      bodyEl.textContent  = res.content;
+      renderContent(bodyEl, res);
     }).catch(function(err) {
       if (err && (err.code === 'DENIED' || err.code === 'FP_MISMATCH' || err.code === 'TOKEN_INVALID')) {
         showBlocker('Access Revoked', 'Your session is no longer valid.', err.code);
@@ -549,7 +604,15 @@
 
   // ── Helpers ───────────────────────────────────────────────────────────
   function escHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderContent(bodyEl, res) {
+    if (res.format === 'html') {
+      bodyEl.innerHTML = '<article class="doc-shell" draggable="false">' + res.content + '</article>';
+      return;
+    }
+    bodyEl.innerHTML = '<div class="plain-doc">' + escHtml(res.content) + '</div>';
   }
 
   window.toggleSidebar = function() {
@@ -570,9 +633,12 @@
 
     // Disable right-click
     document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+    ['copy', 'cut', 'dragstart', 'selectstart'].forEach(function(type) {
+      document.addEventListener(type, function(e) { e.preventDefault(); });
+    });
     // Disable common save shortcuts
     document.addEventListener('keydown', function(e) {
-      if ((e.ctrlKey || e.metaKey) && ['s','p','u'].indexOf(e.key.toLowerCase()) !== -1) {
+      if ((e.ctrlKey || e.metaKey) && ['a','c','s','p','u','x'].indexOf(e.key.toLowerCase()) !== -1) {
         e.preventDefault();
       }
     });

@@ -262,7 +262,11 @@ app.post('/api/license/chunk', apiLimiter, (req, res) => {
   if (!chunk) return res.status(404).json({ error: 'Section not found', code: 'NOT_FOUND' });
 
   try {
-    return res.json({ content: aesDecrypt(chunk.ciphertext), title: chunk.title });
+    return res.json({
+      content: aesDecrypt(chunk.ciphertext),
+      format: chunk.format || 'text',
+      title: chunk.title,
+    });
   } catch (e) {
     console.error('Decrypt error', e.message);
     return res.status(500).json({ error: 'Decryption failed', code: 'DECRYPT_FAILED' });

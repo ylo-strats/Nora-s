@@ -38,47 +38,59 @@ function aesEncrypt(plaintext) {
   return iv.toString('hex') + ':' + cipher.getAuthTag().toString('hex') + ':' + enc.toString('hex');
 }
 
+function stripTags(html) {
+  return String(html || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function splitHtmlByHeadings(html) {
+  const matches = Array.from(html.matchAll(/<h1[^>]*>[\s\S]*?<\/h1>/gi));
+  if (!matches.length) {
+    return [{
+      id: 'sec1',
+      title: stripTags(html).slice(0, 80) || 'Document',
+      content: html,
+      format: 'html',
+    }];
+  }
+
+  return matches.map((match, i) => {
+    const start = match.index;
+    const end = i + 1 < matches.length ? matches[i + 1].index : html.length;
+    const sectionHtml = html.slice(start, end).trim();
+    return {
+      id: `sec${i + 1}`,
+      title: stripTags(match[0]) || `Section ${i + 1}`,
+      content: sectionHtml,
+      format: 'html',
+    };
+  });
+}
+
 async function extractDocx(filePath) {
   if (!mammoth) {
     console.error('mammoth not installed. Run: npm install mammoth');
     process.exit(1);
   }
-  const result = await mammoth.extractRawText({ path: filePath });
-  const text   = result.value;
-
-  // Split on heading-like lines (ALL CAPS or lines < 80 chars followed by long content)
-  const lines    = text.split('\n');
-  const sections = [];
-  let current    = null;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-
-    // Heuristic: short lines (likely headings) start a new section
-    const isHeading = trimmed.length < 100 && (
-      trimmed === trimmed.toUpperCase() ||
-      /^(chapter|section|part|\d+[\.\)]\s)/i.test(trimmed)
-    );
-
-    if (isHeading && current) {
-      sections.push(current);
-      current = { title: trimmed, lines: [] };
-    } else if (isHeading && !current) {
-      current = { title: trimmed, lines: [] };
-    } else if (current) {
-      current.lines.push(trimmed);
-    } else {
-      current = { title: 'Introduction', lines: [trimmed] };
+  const result = await mammoth.convertToHtml(
+    { path: filePath },
+    {
+      includeDefaultStyleMap: true,
+      convertImage: mammoth.images.imgElement((image) => {
+        return image.read('base64').then((encoded) => ({
+          src: `data:${image.contentType};base64,${encoded}`,
+        }));
+      }),
     }
-  }
-  if (current) sections.push(current);
+  );
 
-  return sections.map((s, i) => ({
-    id:      `sec${i + 1}`,
-    title:   s.title,
-    content: s.lines.join('\n'),
-  }));
+  for (const msg of result.messages || []) {
+    console.warn(`[Mammoth] ${msg.type}: ${msg.message}`);
+  }
+
+  return splitHtmlByHeadings(result.value);
 }
 
 async function main() {
@@ -129,7 +141,7 @@ async function main() {
   for (const sec of sections) {
     const id         = sec.id || `sec${Object.keys(chunks).length + 1}`;
     const ciphertext = aesEncrypt(sec.content || '');
-    chunks[id]       = { title: sec.title, ciphertext };
+    chunks[id]       = { title: sec.title, format: sec.format || 'text', ciphertext };
     manifest.push({ id, title: sec.title });
     process.stdout.write(`  ✓ ${id}: ${sec.title.slice(0, 50)}\n`);
   }
