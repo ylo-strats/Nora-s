@@ -31,6 +31,8 @@ const PUBLIC_USER_ID = normalizeUserId(process.env.PUBLIC_USER_ID || 'USER-001')
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
 const DB_FILE = path.join(__dirname, 'data', 'db.json');
+const CHUNKS_FILE = path.join(__dirname, 'data', 'chunks.json');
+const MANIFEST_FILE = path.join(__dirname, 'data', 'manifest.json');
 fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
 
 function loadDB() {
@@ -253,10 +255,9 @@ app.post('/api/license/chunk', apiLimiter, (req, res) => {
     return res.status(403).json({ error: 'Device mismatch', code: 'FP_MISMATCH' });
   }
 
-  const chunksFile = path.join(__dirname, 'data', 'chunks.json');
-  if (!fs.existsSync(chunksFile)) return res.status(503).json({ error: 'Content not loaded', code: 'NO_CONTENT' });
+  if (!fs.existsSync(CHUNKS_FILE)) return res.status(503).json({ error: 'Content not loaded', code: 'NO_CONTENT' });
 
-  const chunks = JSON.parse(fs.readFileSync(chunksFile, 'utf8'));
+  const chunks = JSON.parse(fs.readFileSync(CHUNKS_FILE, 'utf8'));
   const chunk  = chunks[chunkId];
   if (!chunk) return res.status(404).json({ error: 'Section not found', code: 'NOT_FOUND' });
 
@@ -264,7 +265,7 @@ app.post('/api/license/chunk', apiLimiter, (req, res) => {
     return res.json({ content: aesDecrypt(chunk.ciphertext), title: chunk.title });
   } catch (e) {
     console.error('Decrypt error', e.message);
-    return res.status(500).json({ error: 'Decryption failed' });
+    return res.status(500).json({ error: 'Decryption failed', code: 'DECRYPT_FAILED' });
   }
 });
 
@@ -288,6 +289,33 @@ app.get('/api/admin/stats', adminLimiter, requireAdmin, (req, res) => {
     users,
     suspiciousLog: db.suspiciousLog.slice(0, 200),
   });
+});
+
+app.get('/api/admin/content-status', adminLimiter, requireAdmin, (req, res) => {
+  const status = {
+    manifestExists: fs.existsSync(MANIFEST_FILE),
+    chunksExists: fs.existsSync(CHUNKS_FILE),
+    chunkCount: 0,
+    decryptOk: false,
+  };
+
+  if (!status.chunksExists) {
+    return res.json(status);
+  }
+
+  try {
+    const chunks = JSON.parse(fs.readFileSync(CHUNKS_FILE, 'utf8'));
+    const firstChunk = Object.values(chunks)[0];
+    status.chunkCount = Object.keys(chunks).length;
+    if (firstChunk?.ciphertext) {
+      aesDecrypt(firstChunk.ciphertext);
+      status.decryptOk = true;
+    }
+  } catch (e) {
+    status.error = e.message;
+  }
+
+  res.json(status);
 });
 
 app.post('/api/admin/config', adminLimiter, requireAdmin, (req, res) => {
@@ -353,7 +381,6 @@ app.get('/health', (_, res) => res.json({ ok: true, ts: now() }));
 
 const viewerPath = path.join(__dirname, '..', 'viewer');
 const adminPath  = path.join(__dirname, '..', 'admin');
-const manifestFile = path.join(__dirname, 'data', 'manifest.json');
 
 function sendViewer(req, res) {
   const userId = normalizeUserId(req.query.user || PUBLIC_USER_ID);
@@ -371,7 +398,7 @@ app.use('/viewer', express.static(viewerPath, { index: false }));
 app.use('/admin', express.static(adminPath));
 
 app.get(['/manifest.json', '/viewer/manifest.json'], (req, res) => {
-  res.sendFile(manifestFile);
+  res.sendFile(MANIFEST_FILE);
 });
 
 app.get('/admin', (req, res) => {

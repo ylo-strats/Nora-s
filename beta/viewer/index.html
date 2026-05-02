@@ -518,7 +518,15 @@
         return;
       }
       titleEl.textContent = 'Error loading section';
-      bodyEl.textContent  = 'Could not decrypt content. Check your connection and reload.';
+      if (err && err.code === 'NO_CONTENT') {
+        bodyEl.textContent = 'Document content is not loaded on the server. Contact the administrator.';
+        return;
+      }
+      if (err && err.code === 'DECRYPT_FAILED') {
+        bodyEl.textContent = 'Could not decrypt content. The server content key does not match this document.';
+        return;
+      }
+      bodyEl.textContent = 'Could not load content. Check your connection and reload.';
     });
   }
 
