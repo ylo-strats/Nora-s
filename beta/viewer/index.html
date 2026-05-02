@@ -102,14 +102,13 @@
     scrollbar-width: thin; scrollbar-color: var(--border) transparent;
   }
   .nav-item {
-    padding: 10px 12px; border-radius: 8px; cursor: pointer;
+    padding: 9px 10px; border-radius: 8px; cursor: pointer;
     transition: background .15s; margin-bottom: 2px;
     border: 1px solid transparent;
   }
   .nav-item:hover  { background: rgba(59,130,246,.08); }
   .nav-item.active { background: rgba(59,130,246,.15); border-color: rgba(59,130,246,.3); }
-  .nav-item .title { font-size: 13px; font-weight: 500; line-height: 1.4; }
-  .nav-item .meta  { font-size: 11px; color: var(--muted); margin-top: 2px; display: flex; align-items: center; gap: 4px; }
+  .nav-item .title { font-size: 12px; font-weight: 500; line-height: 1.35; }
 
   #user-badge {
     padding: 12px;
@@ -133,14 +132,13 @@
   #content-panel {
     flex: 1; overflow-y: auto; position: relative;
     padding: 40px 48px;
+    scroll-behavior: smooth;
     scrollbar-width: thin; scrollbar-color: var(--border) transparent;
   }
   @media (max-width: 700px) { #content-panel { padding: 20px 16px; } }
 
   #section-title {
-    font-size: 26px; font-weight: 700;
-    margin-bottom: 24px; line-height: 1.3;
-    color: var(--text);
+    display: none;
   }
   #section-body {
     color: #cbd5e1;
@@ -152,9 +150,18 @@
     -webkit-user-select: none !important;
     -ms-user-select: none !important;
   }
+  .document-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+  .doc-section {
+    scroll-margin-top: 24px;
+  }
   .doc-shell {
+    position: relative;
     max-width: 920px;
-    margin: 0 auto 40px;
+    margin: 0 auto;
     background: #f8fafc;
     color: #111827;
     border: 1px solid #d8dee9;
@@ -175,6 +182,25 @@
   .doc-shell h2 { font-size: 20px; }
   .doc-shell h3 { font-size: 18px; }
   .doc-shell p { margin: 0 0 12px; }
+  .doc-shell strong {
+    color: #111827;
+  }
+  .doc-shell em {
+    color: #334155;
+  }
+  .doc-shell span[style*="color"],
+  .doc-shell font[color] {
+    font-weight: inherit;
+  }
+  .doc-shell span[style*="background"],
+  .doc-shell span[style*="background-color"],
+  .doc-shell mark,
+  .doc-shell .highlight {
+    background: #fef08a;
+    color: inherit;
+    padding: 0 .12em;
+    border-radius: 2px;
+  }
   .doc-shell ul, .doc-shell ol { margin: 0 0 12px 28px; padding: 0; }
   .doc-shell li { margin: 0 0 8px; }
   .doc-shell table {
@@ -193,10 +219,6 @@
     display: block;
     margin: 16px auto;
     pointer-events: none;
-  }
-  .doc-shell mark, .doc-shell .highlight {
-    background: #fef08a;
-    color: inherit;
   }
   .plain-doc {
     white-space: pre-wrap;
@@ -217,26 +239,28 @@
   /* ── Watermark ───────────────────────────────────────────────────────── */
   #watermark {
     position: fixed;
-    inset: 0; pointer-events: none; z-index: 100;
+    inset: 0; pointer-events: none; z-index: 120;
     display: flex; align-items: center; justify-content: center;
     transform: rotate(-25deg);
-    opacity: .045;
+    opacity: .18;
     font-size: clamp(28px, 5vw, 60px);
     font-weight: 900; letter-spacing: 4px;
-    color: #fff; white-space: nowrap;
-    text-shadow: 0 0 40px rgba(59,130,246,.6);
+    color: rgba(15, 23, 42, .65); white-space: nowrap;
+    mix-blend-mode: multiply;
+    text-shadow: 0 0 18px rgba(255,255,255,.55);
     user-select: none; -webkit-user-select: none;
   }
 
   /* repeat watermark grid */
   #watermark-grid {
-    position: fixed; inset: 0; pointer-events: none; z-index: 99;
-    opacity: .018;
+    position: fixed; inset: 0; pointer-events: none; z-index: 119;
+    opacity: .055;
     background-image: repeating-linear-gradient(
       -30deg,
       transparent, transparent 80px,
-      rgba(255,255,255,.4) 80px, rgba(255,255,255,.4) 81px
+      rgba(15,23,42,.45) 80px, rgba(15,23,42,.45) 81px
     );
+    mix-blend-mode: multiply;
   }
 
   /* ── Blocking screens ────────────────────────────────────────────────── */
@@ -540,38 +564,56 @@
     items.forEach(function(sec) {
       var div = document.createElement('div');
       div.className = 'nav-item' + (sec.id === state.activeId ? ' active' : '');
-      div.innerHTML =
-        '<div class="title">' + escHtml(sec.title) + '</div>' +
-        '<div class="meta"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>encrypted section</div>';
+      div.innerHTML = '<div class="title">' + escHtml(sec.title) + '</div>';
       div.onclick = function() {
-        selectSection(sec.id);
+        scrollToSection(sec.id);
         if (window.innerWidth <= 700) toggleSidebar();
       };
       list.appendChild(div);
     });
   }
 
-  function selectSection(id) {
+  function scrollToSection(id) {
     state.activeId = id;
     renderNav(document.getElementById('search').value);
+    var section = document.getElementById('doc-' + id);
+    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
+  function setActiveSection(id) {
+    if (!id || state.activeId === id) return;
+    state.activeId = id;
+    renderNav(document.getElementById('search').value);
+  }
+
+  function showDocumentLoading() {
     var titleEl = document.getElementById('section-title');
     var bodyEl  = document.getElementById('section-body');
 
-    // Skeleton loader
     titleEl.innerHTML = '<div class="skel" style="width:60%;height:26px"></div>';
     bodyEl.innerHTML  = [1,2,3,4,5,6].map(function(i) {
       return '<div class="skel" style="width:' + (70 + Math.random()*28|0) + '%;margin-bottom:14px"></div>';
     }).join('');
+  }
 
-    fetchChunk(id).then(function(res) {
-      titleEl.textContent = res.title;
-      renderContent(bodyEl, res);
+  function loadDocument() {
+    showDocumentLoading();
+    return Promise.all(state.manifest.map(function(sec) {
+      return fetchChunk(sec.id).then(function(res) {
+        return { id: sec.id, title: sec.title, chunk: res };
+      });
+    })).then(function(sections) {
+      var bodyEl = document.getElementById('section-body');
+      bodyEl.innerHTML = '<div class="document-stack">' + sections.map(renderDocumentSection).join('') + '</div>';
+      setupScrollSpy();
+      if (sections.length) setActiveSection(sections[0].id);
     }).catch(function(err) {
       if (err && (err.code === 'DENIED' || err.code === 'FP_MISMATCH' || err.code === 'TOKEN_INVALID')) {
         showBlocker('Access Revoked', 'Your session is no longer valid.', err.code);
         return;
       }
+      var titleEl = document.getElementById('section-title');
+      var bodyEl  = document.getElementById('section-body');
       titleEl.textContent = 'Error loading section';
       if (err && err.code === 'NO_CONTENT') {
         bodyEl.textContent = 'Document content is not loaded on the server. Contact the administrator.';
@@ -613,6 +655,46 @@
       return;
     }
     bodyEl.innerHTML = '<div class="plain-doc">' + escHtml(res.content) + '</div>';
+  }
+
+  function renderDocumentSection(section) {
+    var content = section.chunk.format === 'html'
+      ? section.chunk.content
+      : '<div class="plain-doc">' + escHtml(section.chunk.content) + '</div>';
+    return '<section id="doc-' + escHtml(section.id) + '" class="doc-section">' +
+      '<article class="doc-shell" draggable="false">' + content + '</article>' +
+      '</section>';
+  }
+
+  function setupScrollSpy() {
+    var panel = document.getElementById('content-panel');
+    var ticking = false;
+
+    function updateActive() {
+      ticking = false;
+      var sections = Array.prototype.slice.call(document.querySelectorAll('.doc-section'));
+      var panelTop = panel.getBoundingClientRect().top;
+      var best = sections[0];
+      var bestDistance = Infinity;
+
+      sections.forEach(function(section) {
+        var distance = Math.abs(section.getBoundingClientRect().top - panelTop - 16);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = section;
+        }
+      });
+
+      if (best) setActiveSection(best.id.replace(/^doc-/, ''));
+    }
+
+    panel.onscroll = function() {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(updateActive);
+      }
+    };
+    updateActive();
   }
 
   window.toggleSidebar = function() {
@@ -672,9 +754,7 @@
       setStatus(true, 'License valid');
       hideLoader();
       schedulePing();
-
-      // Auto-select first section
-      if (state.manifest.length > 0) selectSection(state.manifest[0].id);
+      return loadDocument();
     }).catch(function(e) {
       if (!document.getElementById('blocker').classList.contains('show')) {
         showBlocker('Connection Error', 'Could not reach the license server. Check your internet and reload.', 'NET_ERR');

@@ -140,7 +140,7 @@ app.use(cors({
 }));
 
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, max: 40,
+  windowMs: 15 * 60 * 1000, max: 300,
   message: { error: 'Rate limited', code: 'RATE_LIMITED' },
 });
 const adminLimiter = rateLimit({
