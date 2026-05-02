@@ -1,0 +1,5 @@
+node_modules/
+backend/data/db.json
+backend/data/chunks.json
+dist/
+.env
