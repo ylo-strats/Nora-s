@@ -156,7 +156,7 @@
     <p>Enter your license server URL and admin secret to continue.</p>
     <div>
       <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Server URL</label>
-      <input type="text" id="inp-server" value="http://localhost:3001" placeholder="https://your-server.com"/>
+      <input type="text" id="inp-server" placeholder="https://your-server.com"/>
     </div>
     <div>
       <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Admin Secret</label>
@@ -309,12 +309,19 @@
   var cfg = { server: '', secret: '' };
   var stats = null;
 
+  function normalizeServerUrl(value) {
+    var server = value.trim();
+    if (!server) return window.location.origin;
+    if (!/^https?:\/\//i.test(server)) server = 'https://' + server;
+    return server.replace(/\/$/, '');
+  }
+
   // ── Auth ────────────────────────────────────────────────────────────
   window.connectAdmin = function() {
-    cfg.server = document.getElementById('inp-server').value.trim().replace(/\/$/, '');
+    cfg.server = normalizeServerUrl(document.getElementById('inp-server').value);
     cfg.secret = document.getElementById('inp-secret').value.trim();
-    if (!cfg.server || !cfg.secret) {
-      showAuthErr('Please fill in both fields.');
+    if (!cfg.secret) {
+      showAuthErr('Please enter the admin secret.');
       return;
     }
     api('GET', '/api/admin/stats').then(function() {
@@ -504,6 +511,8 @@
       connectAdmin();
     }
   });
+
+  document.getElementById('inp-server').value = window.location.origin;
 
 })();
 </script>

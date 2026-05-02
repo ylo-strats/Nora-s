@@ -126,7 +126,10 @@ function logSuspicious(userId, fingerprint, reason, ip) {
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
-app.use(helmet({ crossOriginEmbedderPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 app.use(express.json({ limit: '512kb' }));
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : true,
