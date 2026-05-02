@@ -96,6 +96,13 @@ function tagOpen(xml, name) {
   return m ? m[0] : '';
 }
 
+function boolProp(rPr, name) {
+  const open = tagOpen(rPr, name);
+  if (!open) return false;
+  const value = attr(open, 'w:val');
+  return !/^(0|false|off)$/i.test(value);
+}
+
 function runStyleFromXml(rPr) {
   const styles = [];
   const color = attr(tagOpen(rPr, 'w:color'), 'w:val');
@@ -113,9 +120,9 @@ function runStyleFromXml(rPr) {
   if (!Number.isNaN(size)) styles.push(`font-size:${size / 2}pt`);
 
   return {
-    bold: /<w:b\b/.test(rPr),
-    italic: /<w:i\b/.test(rPr),
-    underline: /<w:u\b/.test(rPr),
+    bold: boolProp(rPr, 'w:b'),
+    italic: boolProp(rPr, 'w:i'),
+    underline: boolProp(rPr, 'w:u'),
     style: styles.join(';'),
   };
 }
@@ -148,9 +155,9 @@ function renderStyledText(text, style) {
   return html;
 }
 
-function renderRun(runXml, inheritedStyle) {
+function renderRun(runXml) {
   const ownStyle = runStyleFromXml(tag(runXml, 'w:rPr'));
-  const style = mergeRunStyles(inheritedStyle, ownStyle);
+  const style = mergeRunStyles({ bold: false, italic: false, underline: false, style: '' }, ownStyle);
   const parts = [];
   const tokens = runXml.match(/<w:t\b[\s\S]*?<\/w:t>|<w:tab\/>|<w:br\b[^>]*\/>/g) || [];
 
@@ -196,9 +203,8 @@ function renderDocxXmlToHtml(documentXml) {
     const isHeading1 = styleId === '1' || /^Heading1$/i.test(styleId);
     const isHeading2 = styleId === '2' || /^Heading2$/i.test(styleId);
     const isList = /<w:numPr\b/.test(pPr) && !isHeading1 && !isHeading2;
-    const inheritedStyle = runStyleFromXml(tag(pPr, 'w:rPr'));
     const runs = pXml.match(/<w:r\b[\s\S]*?<\/w:r>/g) || [];
-    const content = runs.map(r => renderRun(r, inheritedStyle)).join('').trim();
+    const content = runs.map(r => renderRun(r)).join('').trim();
 
     if (!content) continue;
 
