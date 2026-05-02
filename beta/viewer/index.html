@@ -161,6 +161,10 @@
     -webkit-user-select: none !important;
     -ms-user-select: none !important;
   }
+  body.protected #section-body {
+    filter: blur(18px);
+    opacity: .08;
+  }
   .document-stack {
     display: flex;
     flex-direction: column;
@@ -266,6 +270,45 @@
     text-shadow: 0 0 18px rgba(255,255,255,.55);
     user-select: none; -webkit-user-select: none;
   }
+
+  #watermark-tiles {
+    position: fixed;
+    inset: -15vh -15vw;
+    z-index: 121;
+    pointer-events: none;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(220px, 1fr));
+    gap: 34px 20px;
+    transform: rotate(-24deg);
+    opacity: .24;
+    mix-blend-mode: multiply;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .wm-tile {
+    color: rgba(15,23,42,.7);
+    font: 800 12px/1.35 "Segoe UI", system-ui, sans-serif;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    white-space: pre-line;
+    text-align: center;
+    text-shadow: 0 1px 0 rgba(255,255,255,.55);
+  }
+
+  #privacy-shield {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+    background: #05070b;
+    color: #e2e8f0;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 28px;
+    font: 600 14px/1.6 "Segoe UI", system-ui, sans-serif;
+  }
+  body.protected #privacy-shield { display: flex; }
 
   /* repeat watermark grid */
   #watermark-grid {
@@ -381,7 +424,9 @@
 
 <!-- Watermarks -->
 <div id="watermark-grid"></div>
+<div id="watermark-tiles"></div>
 <div id="watermark"></div>
+<div id="privacy-shield">Document hidden<br>Return to the viewer to continue</div>
 
 <script>
 (function() {
@@ -490,8 +535,44 @@
     document.getElementById('status-txt').textContent = text;
   }
 
-  function setWatermark(text) {
-    document.getElementById('watermark').textContent = text + '  ' + text + '  ' + text;
+  function watermarkText() {
+    var stamp = new Date().toLocaleString();
+    return [
+      CFG.userId,
+      'DEVICE ' + state.fingerprint.slice(0, 14),
+      location.hostname,
+      stamp,
+    ].join('  |  ');
+  }
+
+  function setWatermark() {
+    var text = watermarkText();
+    document.getElementById('watermark').textContent = text + '  ' + text;
+    renderWatermarkTiles(text);
+  }
+
+  function renderWatermarkTiles(text) {
+    var el = document.getElementById('watermark-tiles');
+    var shortText = text.replace(/\s+\|\s+/g, '\n');
+    var tiles = [];
+    for (var i = 0; i < 84; i++) {
+      var shift = (i % 5) * 7;
+      tiles.push(
+        '<div class="wm-tile" style="transform:translateX(' + shift + 'px)">' +
+        escHtml(shortText) +
+        '</div>'
+      );
+    }
+    el.innerHTML = tiles.join('');
+  }
+
+  function startWatermarkClock() {
+    setWatermark();
+    setInterval(setWatermark, 30000);
+  }
+
+  function setProtectedMode(on) {
+    document.body.classList.toggle('protected', !!on);
   }
 
   // ── API ───────────────────────────────────────────────────────────────
@@ -757,7 +838,19 @@
       if ((e.ctrlKey || e.metaKey) && ['a','c','s','p','u','x'].indexOf(e.key.toLowerCase()) !== -1) {
         e.preventDefault();
       }
+      if (e.key === 'PrintScreen') {
+        setProtectedMode(true);
+        setTimeout(function() { setProtectedMode(false); }, 2200);
+      }
     });
+
+    document.addEventListener('visibilitychange', function() {
+      setProtectedMode(document.hidden);
+    });
+    window.addEventListener('blur', function() { setProtectedMode(true); });
+    window.addEventListener('focus', function() { setProtectedMode(false); setWatermark(); });
+    window.addEventListener('beforeprint', function() { setProtectedMode(true); });
+    window.addEventListener('afterprint', function() { setProtectedMode(false); });
   })();
 
   // ── Main ──────────────────────────────────────────────────────────────
@@ -766,7 +859,7 @@
 
     document.getElementById('uid-display').textContent = CFG.userId;
     document.getElementById('fp-display').textContent  = state.fingerprint.slice(0, 12) + '…';
-    setWatermark(CFG.userId);
+    startWatermarkClock();
 
     // Check if we have a cached token that might still be valid
     var cachedToken = localStorage.getItem(CFG.tokenKey);
