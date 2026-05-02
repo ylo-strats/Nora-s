@@ -327,12 +327,24 @@ app.post('/api/admin/encrypt-chunk', adminLimiter, requireAdmin, (req, res) => {
 
 app.get('/health', (_, res) => res.json({ ok: true, ts: now() }));
 
-const viewerPath = path.join(__dirname, "..", "viewer");
+const viewerPath = path.join(__dirname, '..', 'viewer');
+const adminPath  = path.join(__dirname, '..', 'admin');
+const manifestFile = path.join(__dirname, 'data', 'manifest.json');
 
 app.use(express.static(viewerPath));
+app.use('/viewer', express.static(viewerPath));
+app.use('/admin', express.static(adminPath));
 
-app.get("/", (req, res) => {
-  res.sendFile(path.join(viewerPath, "index.html"));
+app.get(['/manifest.json', '/viewer/manifest.json'], (req, res) => {
+  res.sendFile(manifestFile);
+});
+
+app.get(['/', '/viewer'], (req, res) => {
+  res.sendFile(path.join(viewerPath, 'index.html'));
+});
+
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(adminPath, 'index.html'));
 });
 
 app.listen(PORT, () => {
