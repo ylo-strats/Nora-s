@@ -327,6 +327,14 @@ app.post('/api/admin/encrypt-chunk', adminLimiter, requireAdmin, (req, res) => {
 
 app.get('/health', (_, res) => res.json({ ok: true, ts: now() }));
 
+const viewerPath = path.join(__dirname, "..", "viewer");
+
+app.use(express.static(viewerPath));
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(viewerPath, "index.html"));
+});
+
 app.listen(PORT, () => {
   console.log(`[SecureDRM] License server on :${PORT}`);
   if (ADMIN_SECRET.startsWith('CHANGE_ME')) console.warn('[WARNING] Change ADMIN_SECRET before production!');
