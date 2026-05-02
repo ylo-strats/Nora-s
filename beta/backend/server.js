@@ -26,6 +26,7 @@ const PORT = process.env.PORT || 3001;
 const ADMIN_SECRET = process.env.ADMIN_SECRET  || 'CHANGE_ME_ADMIN_SECRET_32CHARS!!';
 const TOKEN_SECRET = process.env.TOKEN_SECRET  || 'CHANGE_ME_TOKEN_SECRET_32CHARS!!';
 const CONTENT_KEY  = process.env.CONTENT_KEY   || 'CHANGE_ME_CONTENT_KEY_32CHARS!!!';
+const PUBLIC_USER_ID = normalizeUserId(process.env.PUBLIC_USER_ID || 'USER-001');
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
@@ -52,6 +53,26 @@ let db = loadDB();
 // ─── Crypto helpers ───────────────────────────────────────────────────────────
 
 function now() { return new Date().toISOString(); }
+
+function normalizeUserId(userId) {
+  return String(userId || 'USER-001').trim().toUpperCase().slice(0, 32);
+}
+
+function ensurePublicUser() {
+  if (process.env.AUTO_SEED_PUBLIC_USER === 'false') return;
+  if (db.users[PUBLIC_USER_ID]) return;
+
+  db.users[PUBLIC_USER_ID] = {
+    created: now(),
+    banned: false,
+    devices: [],
+    lastSeen: null,
+    accessCount: 0,
+  };
+  saveDB(db);
+}
+
+ensurePublicUser();
 
 function hashFp(fp) {
   return crypto.createHmac('sha256', TOKEN_SECRET).update(fp).digest('hex');
