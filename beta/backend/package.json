@@ -1,8 +1,5 @@
 {
-  
-  "scripts": {
-    "start": "node server.js"
-  },
+
   "name": "securedrm-backend",
   "version": "2.0.0",
   "private": true,
