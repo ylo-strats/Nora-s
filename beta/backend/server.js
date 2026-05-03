@@ -631,6 +631,16 @@ app.post('/api/admin/ban', adminLimiter, requireAdmin, (req, res) => {
   res.json({ ok: true, userId, banned: db.users[userId].banned });
 });
 
+app.post('/api/admin/delete-user', adminLimiter, requireAdmin, (req, res) => {
+  const userId = normalizeUserId(req.body?.userId);
+  if (!userId || !db.users[userId]) return res.status(404).json({ error: 'User not found' });
+  delete db.users[userId];
+  db.activityLog = db.activityLog.filter(entry => entry.userId !== userId);
+  db.suspiciousLog = db.suspiciousLog.filter(entry => entry.userId !== userId);
+  saveDB(db);
+  res.json({ ok: true, userId });
+});
+
 app.post('/api/admin/revoke-device', adminLimiter, requireAdmin, (req, res) => {
   const { userId, fpHash } = req.body || {};
   const user = db.users[userId];

@@ -505,6 +505,7 @@
         '<td style="display:flex;gap:6px;flex-wrap:wrap">' +
           '<button class="btn-ghost btn-sm" onclick="setUserName(\'' + u.id + '\')">Name</button>' +
           banBtn +
+          '<button class="btn-danger btn-sm" onclick="deleteUser(\'' + u.id + '\')">Delete</button>' +
         '</td>' +
         '</tr>';
     }).join('');
@@ -618,6 +619,13 @@
     if (!confirm(word.charAt(0).toUpperCase() + word.slice(1) + ' ' + userId + '?')) return;
     api('POST', '/api/admin/ban', { userId: userId, ban: ban })
       .then(function() { toast(userId + ' ' + word + 'ned'); loadStats(); })
+      .catch(function(e) { toast(e.message, true); });
+  };
+
+  window.deleteUser = function(userId) {
+    if (!confirm('Delete ' + userId + '? This will remove the user, devices and logs. Old links for this user will stop working.')) return;
+    api('POST', '/api/admin/delete-user', { userId: userId })
+      .then(function() { toast('Deleted: ' + userId); loadStats(); })
       .catch(function(e) { toast(e.message, true); });
   };
 
