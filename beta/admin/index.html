@@ -60,6 +60,11 @@
   .stat-card .value.danger  { color: var(--danger); }
   .stat-card .value.success { color: var(--success); }
   .stat-card .value.warn    { color: var(--warn); }
+  .stat-card .value.small {
+    font-size: 13px;
+    line-height: 1.45;
+    word-break: break-word;
+  }
 
   /* ── Panel ────────────────────────────────────────────────────────── */
   .panel {
@@ -213,6 +218,10 @@
       <div class="stat-card">
         <div class="label">Max Devices / User</div>
         <div class="value" id="st-maxdev">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Database</div>
+        <div class="value small" id="st-db">—</div>
       </div>
     </div>
 
@@ -419,6 +428,7 @@
       document.getElementById('st-suspicious').textContent = data.suspiciousLog.length;
       document.getElementById('st-maxusers').textContent   = data.config.maxUsers;
       document.getElementById('st-maxdev').textContent     = data.config.maxDevicesPerUser;
+      renderStorageStatus(data.storage);
       document.getElementById('cfg-max-users').value       = data.config.maxUsers;
       document.getElementById('cfg-max-dev').value         = data.config.maxDevicesPerUser;
       renderFontOptions(data.viewerFonts || {}, data.config.docFont);
@@ -430,6 +440,14 @@
       if (!options.silent) toast('Failed to load stats: ' + e.message, true);
     });
   };
+
+  function renderStorageStatus(storage) {
+    var el = document.getElementById('st-db');
+    if (!el || !storage) return;
+    el.className = 'value small ' + (storage.persistent ? 'success' : 'danger');
+    el.textContent = (storage.persistent ? 'Persistent' : 'Temporary') + ' · ' + storage.dataDir;
+    el.title = storage.message || storage.dbFile || '';
+  }
 
   function renderFontOptions(fonts, selected) {
     var el = document.getElementById('cfg-doc-font');

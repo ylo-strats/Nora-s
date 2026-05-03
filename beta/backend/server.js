@@ -57,6 +57,18 @@ const CHUNKS_FILE = path.join(__dirname, 'data', 'chunks.json');
 const MANIFEST_FILE = path.join(__dirname, 'data', 'manifest.json');
 fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
 
+function dbStorageStatus() {
+  const normalizedDir = DATA_DIR.replace(/\\/g, '/');
+  return {
+    dataDir: DATA_DIR,
+    dbFile: DB_FILE,
+    persistent: normalizedDir === '/data' || normalizedDir.endsWith('/data'),
+    message: normalizedDir === '/data' || normalizedDir.endsWith('/data')
+      ? 'Persistent volume is active'
+      : 'Using project folder storage. On Railway this can reset after redeploy.',
+  };
+}
+
 function migrateLegacyDBIfNeeded() {
   const legacyFile = path.join(LEGACY_DATA_DIR, 'db.json');
   if (DB_FILE === legacyFile || fs.existsSync(DB_FILE) || !fs.existsSync(legacyFile)) return;
@@ -396,6 +408,7 @@ app.get('/api/admin/stats', adminLimiter, requireAdmin, (req, res) => {
     config:        db.config,
     viewerFonts:   Object.fromEntries(Object.entries(VIEWER_FONTS).map(([id, font]) => [id, font.label])),
     dataFile:      DB_FILE,
+    storage:       dbStorageStatus(),
     totalIssued:   users.length,
     totalActive:   users.filter(u => !u.banned && u.deviceCount > 0).length,
     totalBanned:   users.filter(u => u.banned).length,
@@ -456,7 +469,9 @@ app.post('/api/admin/issue', adminLimiter, requireAdmin, (req, res) => {
   if (count >= db.config.maxUsers) {
     return res.status(400).json({ error: `User limit reached (${db.config.maxUsers})` });
   }
-  const newId = req.body?.userId || `USER-${String(count + 1).padStart(3, '0')}`;
+  const newId = req.body?.userId
+    ? normalizeUserId(req.body.userId)
+    : `USER-${String(count + 1).padStart(3, '0')}`;
   if (db.users[newId]) return res.status(409).json({ error: 'User ID already exists' });
   db.users[newId] = { created: now(), displayName: '', banned: false, devices: [], lastSeen: null, accessCount: 0 };
   saveDB(db);
