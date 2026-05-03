@@ -26,8 +26,8 @@ const path      = require('path');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET  || 'CHANGE_ME_ADMIN_SECRET_32CHARS!!';
-const TOKEN_SECRET = process.env.TOKEN_SECRET  || 'CHANGE_ME_TOKEN_SECRET_32CHARS!!';
+const ADMIN_SECRET = process.env.ADMIN_SECRET  || 'EsCav7suaF9nd4hUwCabaENPkkG3bzhT';
+const TOKEN_SECRET = process.env.TOKEN_SECRET  || 'Bq4B5kjtXwsv2j6mNFaawJu3EZDVAkBv';
 const CONTENT_KEY  = process.env.CONTENT_KEY   || 'KsuvxqjyDvvk6vNGdJmQSwANw4MzhgHL';
 const PUBLIC_USER_ID = normalizeUserId(process.env.PUBLIC_USER_ID || 'USER-001');
 
@@ -59,28 +59,9 @@ const CHUNKS_FILE = path.join(__dirname, 'data', 'chunks.json');
 const MANIFEST_FILE = path.join(__dirname, 'data', 'manifest.json');
 fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
 
-let mysqlPool = null;
-let persistenceMode = 'file';
-let saveChain = Promise.resolve();
-
-function mysqlUrl() {
-  const url = process.env.MYSQL_URL || process.env.DATABASE_URL || '';
-  return /^mysql:\/\//i.test(url) || /^mariadb:\/\//i.test(url) ? url : '';
-}
-
 function dbStorageStatus() {
   const normalizedDir = DATA_DIR.replace(/\\/g, '/');
-  if (persistenceMode === 'mysql') {
-    return {
-      type: 'mysql',
-      dataDir: 'MySQL',
-      dbFile: 'secure_drm_state/state',
-      persistent: true,
-      message: 'Railway MySQL is active',
-    };
-  }
   return {
-    type: 'file',
     dataDir: DATA_DIR,
     dbFile: DB_FILE,
     persistent: normalizedDir === '/data' || normalizedDir.endsWith('/data'),
@@ -88,36 +69,6 @@ function dbStorageStatus() {
       ? 'Persistent volume is active'
       : 'Using project folder storage. On Railway this can reset after redeploy.',
   };
-}
-
-async function initMySQLIfConfigured() {
-  const url = mysqlUrl();
-  if (!url) return;
-
-  let mysql;
-  try {
-    mysql = require('mysql2/promise');
-  } catch (e) {
-    console.warn('[SecureDRM] MYSQL_URL is set, but mysql2 is not installed. Falling back to db.json.');
-    return;
-  }
-
-  mysqlPool = mysql.createPool({
-    uri: url,
-    waitForConnections: true,
-    connectionLimit: 4,
-    maxIdle: 4,
-    idleTimeout: 60000,
-  });
-
-  await mysqlPool.execute(`
-    CREATE TABLE IF NOT EXISTS secure_drm_state (
-      id VARCHAR(32) PRIMARY KEY,
-      json LONGTEXT NOT NULL,
-      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
-  `);
-  persistenceMode = 'mysql';
 }
 
 function migrateLegacyDBIfNeeded() {
@@ -136,17 +87,12 @@ function normalizeConfig(config = {}) {
 }
 
 function normalizeUserRecord(user = {}) {
-  const devices = Array.isArray(user.devices) ? user.devices.map((device) => ({
-    ...device,
-    displayName: cleanText(device.displayName, 80),
-    snapshot: device.snapshot || {},
-  })) : [];
   return {
     ...user,
     created: user.created || now(),
     displayName: String(user.displayName || '').trim().slice(0, 80),
     banned: user.banned || false,
-    devices,
+    devices: Array.isArray(user.devices) ? user.devices : [],
     lastSeen: user.lastSeen || null,
     accessCount: user.accessCount || 0,
   };
@@ -163,14 +109,7 @@ function viewerConfig() {
 
 migrateLegacyDBIfNeeded();
 
-async function loadDB() {
-  if (mysqlPool) {
-    const [rows] = await mysqlPool.execute('SELECT json FROM secure_drm_state WHERE id = ?', ['state']);
-    if (rows.length) {
-      try { return JSON.parse(rows[0].json); } catch {}
-    }
-  }
-
+function loadDB() {
   if (fs.existsSync(DB_FILE)) {
     try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch {}
   }
@@ -183,39 +122,18 @@ async function loadDB() {
 }
 
 function saveDB(db) {
-  if (mysqlPool) {
-    const snapshot = JSON.stringify(db);
-    saveChain = saveChain.then(function() {
-      return mysqlPool.execute(
-        'INSERT INTO secure_drm_state (id, json) VALUES (?, ?) ON DUPLICATE KEY UPDATE json = VALUES(json)',
-        ['state', snapshot]
-      );
-    }).catch(function(e) {
-      console.error('[SecureDRM] MySQL save failed:', e.message);
-    });
-    return saveChain;
-  }
-
-  try {
-    const tmpFile = DB_FILE + '.tmp';
-    fs.writeFileSync(tmpFile, JSON.stringify(db, null, 2));
-    fs.renameSync(tmpFile, DB_FILE);
-  } catch (e) {
-    console.error('[SecureDRM] File DB save failed:', e.message);
-  }
-  return Promise.resolve();
+  const tmpFile = DB_FILE + '.tmp';
+  fs.writeFileSync(tmpFile, JSON.stringify(db, null, 2));
+  fs.renameSync(tmpFile, DB_FILE);
 }
 
-let db = null;
-
-function normalizeDB(nextDb) {
-  nextDb.config = normalizeConfig(nextDb.config);
-  nextDb.users = nextDb.users || {};
-  Object.keys(nextDb.users).forEach(id => { nextDb.users[id] = normalizeUserRecord(nextDb.users[id]); });
-  nextDb.suspiciousLog = nextDb.suspiciousLog || [];
-  nextDb.activityLog = nextDb.activityLog || [];
-  return nextDb;
-}
+let db = loadDB();
+db.config = normalizeConfig(db.config);
+db.users = db.users || {};
+Object.keys(db.users).forEach(id => { db.users[id] = normalizeUserRecord(db.users[id]); });
+db.suspiciousLog = db.suspiciousLog || [];
+db.activityLog = db.activityLog || [];
+saveDB(db);
 
 // ─── Crypto helpers ───────────────────────────────────────────────────────────
 
@@ -228,38 +146,6 @@ function normalizeUserId(userId) {
 function userLabel(userId) {
   const user = db.users[userId];
   return user?.displayName ? `${user.displayName} (${userId})` : userId;
-}
-
-function cleanText(value, max = 120) {
-  return String(value || '').trim().slice(0, max);
-}
-
-function sanitizeDeviceInfo(info = {}) {
-  const screenInfo = info.screen || {};
-  return {
-    userAgent: cleanText(info.userAgent, 300),
-    platform: cleanText(info.platform, 80),
-    language: cleanText(info.language, 40),
-    timezone: cleanText(info.timezone, 80),
-    screen: {
-      width: Math.max(0, parseInt(screenInfo.width) || 0),
-      height: Math.max(0, parseInt(screenInfo.height) || 0),
-      colorDepth: Math.max(0, parseInt(screenInfo.colorDepth) || 0),
-      pixelRatio: Math.max(0, Number(screenInfo.pixelRatio) || 0),
-    },
-    hardwareConcurrency: Math.max(0, parseInt(info.hardwareConcurrency) || 0),
-    deviceMemory: Math.max(0, Number(info.deviceMemory) || 0),
-    touch: !!info.touch,
-  };
-}
-
-function deviceSummary(snapshot = {}) {
-  const screen = snapshot.screen || {};
-  return [
-    snapshot.platform || 'Unknown platform',
-    screen.width && screen.height ? `${screen.width}x${screen.height}` : '',
-    snapshot.timezone || '',
-  ].filter(Boolean).join(' / ');
 }
 
 function ensurePublicUser() {
@@ -276,6 +162,8 @@ function ensurePublicUser() {
   };
   saveDB(db);
 }
+
+ensurePublicUser();
 
 function hashFp(fp) {
   return crypto.createHmac('sha256', TOKEN_SECRET).update(fp).digest('hex');
@@ -383,7 +271,7 @@ function requireAdmin(req, res, next) {
 
 // POST /api/license/activate  { userId, fingerprint }
 app.post('/api/license/activate', apiLimiter, (req, res) => {
-  const { userId, fingerprint, deviceInfo } = req.body || {};
+  const { userId, fingerprint } = req.body || {};
   const ip = req.ip;
 
   if (!userId || !fingerprint || typeof userId !== 'string' || typeof fingerprint !== 'string') {
@@ -407,7 +295,6 @@ app.post('/api/license/activate', apiLimiter, (req, res) => {
 
   const fpHash      = hashFp(fp);
   const knownDevice = user.devices.find(d => d.fpHash === fpHash);
-  const snapshot    = sanitizeDeviceInfo(deviceInfo);
 
   if (!knownDevice) {
     if (user.devices.length >= db.config.maxDevicesPerUser) {
@@ -418,18 +305,10 @@ app.post('/api/license/activate', apiLimiter, (req, res) => {
         code:    'DEVICE_LIMIT',
       });
     }
-    user.devices.push({
-      fpHash,
-      displayName: '',
-      snapshot,
-      registeredAt: now(),
-      lastSeen: now(),
-      ip,
-    });
+    user.devices.push({ fpHash, registeredAt: now(), lastSeen: now(), ip });
   } else {
     knownDevice.lastSeen = now();
     knownDevice.ip = ip;
-    knownDevice.snapshot = snapshot;
   }
 
   user.lastSeen    = now();
@@ -449,7 +328,7 @@ app.post('/api/license/activate', apiLimiter, (req, res) => {
 
 // POST /api/license/ping  { token, fingerprint }
 app.post('/api/license/ping', apiLimiter, (req, res) => {
-  const { token, fingerprint, deviceInfo } = req.body || {};
+  const { token, fingerprint } = req.body || {};
   const ip = req.ip;
 
   const payload = verifyToken(token);
@@ -473,11 +352,7 @@ app.post('/api/license/ping', apiLimiter, (req, res) => {
   }
 
   const device = user.devices.find(d => d.fpHash === fpHash);
-  if (device) {
-    device.lastSeen = now();
-    device.ip = ip;
-    device.snapshot = sanitizeDeviceInfo(deviceInfo);
-  }
+  if (device) { device.lastSeen = now(); device.ip = ip; }
   user.lastSeen = now();
   saveDB(db);
 
@@ -525,11 +400,7 @@ app.get('/api/admin/stats', adminLimiter, requireAdmin, (req, res) => {
     displayName:  u.displayName || '',
     label:        userLabel(id),
     banned:      u.banned || false,
-    devices:     u.devices.map(d => ({
-      ...d,
-      displayName: d.displayName || '',
-      summary: deviceSummary(d.snapshot),
-    })),
+    devices:     u.devices,
     deviceCount: u.devices.length,
     lastSeen:    u.lastSeen,
     accessCount: u.accessCount || 0,
@@ -595,19 +466,6 @@ app.post('/api/admin/user-name', adminLimiter, requireAdmin, (req, res) => {
   res.json({ ok: true, userId, displayName, label: userLabel(userId) });
 });
 
-app.post('/api/admin/device-name', adminLimiter, requireAdmin, (req, res) => {
-  const userId = normalizeUserId(req.body?.userId);
-  const fpHash = String(req.body?.fpHash || '');
-  const displayName = String(req.body?.displayName || '').trim().slice(0, 80);
-  const user = db.users[userId];
-  if (!user) return res.status(404).json({ error: 'User not found' });
-  const device = user.devices.find(d => d.fpHash === fpHash);
-  if (!device) return res.status(404).json({ error: 'Device not found' });
-  device.displayName = displayName;
-  saveDB(db);
-  res.json({ ok: true, userId, fpHash, displayName });
-});
-
 app.post('/api/admin/issue', adminLimiter, requireAdmin, (req, res) => {
   const count = Object.keys(db.users).length;
   if (count >= db.config.maxUsers) {
@@ -629,16 +487,6 @@ app.post('/api/admin/ban', adminLimiter, requireAdmin, (req, res) => {
   if (db.users[userId].banned) logSuspicious(userId, '', 'Manually banned by admin', 'admin');
   saveDB(db);
   res.json({ ok: true, userId, banned: db.users[userId].banned });
-});
-
-app.post('/api/admin/delete-user', adminLimiter, requireAdmin, (req, res) => {
-  const userId = normalizeUserId(req.body?.userId);
-  if (!userId || !db.users[userId]) return res.status(404).json({ error: 'User not found' });
-  delete db.users[userId];
-  db.activityLog = db.activityLog.filter(entry => entry.userId !== userId);
-  db.suspiciousLog = db.suspiciousLog.filter(entry => entry.userId !== userId);
-  saveDB(db);
-  res.json({ ok: true, userId });
 });
 
 app.post('/api/admin/revoke-device', adminLimiter, requireAdmin, (req, res) => {
@@ -699,22 +547,9 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(adminPath, 'index.html'));
 });
 
-async function start() {
-  await initMySQLIfConfigured();
-  db = normalizeDB(await loadDB());
-  ensurePublicUser();
-  await saveDB(db);
-
-  app.listen(PORT, () => {
-    console.log(`[SecureDRM] License server on :${PORT}`);
-    console.log(`[SecureDRM] DB mode: ${persistenceMode}`);
-    if (ADMIN_SECRET.startsWith('CHANGE_ME')) console.warn('[WARNING] Change ADMIN_SECRET before production!');
-  });
-}
-
-start().catch((e) => {
-  console.error('[SecureDRM] Startup failed:', e);
-  process.exit(1);
+app.listen(PORT, () => {
+  console.log(`[SecureDRM] License server on :${PORT}`);
+  if (ADMIN_SECRET.startsWith('CHANGE_ME')) console.warn('[WARNING] Change ADMIN_SECRET before production!');
 });
 
 module.exports = app;
