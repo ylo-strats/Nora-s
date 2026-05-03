@@ -40,6 +40,7 @@ export ADMIN_SECRET="your-strong-admin-secret-here"
 export TOKEN_SECRET="your-strong-token-secret-here"
 export CONTENT_KEY="exactly-32-chars-content-key!!!"   # must be 32 chars
 export ALLOWED_ORIGINS="https://your-domain.com"
+export MYSQL_URL="mysql://user:pass@host:port/database" # Railway MySQL, preferred
 export DATA_DIR="/data"                                # Railway Volume mount for persistent users
 export PORT=3001
 
@@ -51,11 +52,14 @@ npm start
 > ⚠️ The three secrets must be identical between the server and the ingestion tool.
 > If CONTENT_KEY changes, re-run ingest to re-encrypt content.
 
-**Railway persistence:** create a Railway Volume mounted at `/data`.
-The server now automatically uses `/data/db.json` when that volume exists.
-You can also set `DATA_DIR=/data` explicitly in Railway variables.
-User IDs, registered devices, bans, font settings, and access counters are
-stored in that `db.json`, so they survive restarts and redeploys.
+**Railway persistence:** use Railway MySQL if available. Add the MySQL service
+to the same project, then expose its connection URL to this app as `MYSQL_URL`
+(or `DATABASE_URL`). The server creates a `secure_drm_state` table and stores
+user IDs, registered devices, device names, device snapshots, bans, font
+settings, access counters, and logs there.
+
+If `MYSQL_URL` is not set, the server falls back to file storage. In that mode,
+create a Railway Volume mounted at `/data` and set `DATA_DIR=/data`.
 
 If users disappear after redeploy, the Railway Volume is not mounted to this
 service yet. Add a Volume in the Railway service settings, mount it as `/data`,
@@ -134,6 +138,7 @@ Open `admin/index.html` in any browser. Enter your server URL and admin secret.
 **Capabilities:**
 - View all issued users, active devices, access counts
 - Assign readable names to user IDs and see those names in visit/error logs
+- Assign names to registered devices and inspect saved device snapshots
 - View recent successful access events
 - Ban / unban users (immediate effect on next ping)
 - Revoke individual device slots (frees a slot for re-activation)

@@ -538,6 +538,24 @@
     return btoa(Math.abs(hash).toString(16) + ':' + salt + ':' + navigator.userAgent.slice(0, 20)).slice(0, 80);
   }
 
+  function buildDeviceInfo() {
+    return {
+      userAgent: navigator.userAgent || '',
+      platform: navigator.platform || '',
+      language: navigator.language || '',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+      screen: {
+        width: screen.width || 0,
+        height: screen.height || 0,
+        colorDepth: screen.colorDepth || 0,
+        pixelRatio: window.devicePixelRatio || 1,
+      },
+      hardwareConcurrency: navigator.hardwareConcurrency || 0,
+      deviceMemory: navigator.deviceMemory || 0,
+      touch: 'ontouchstart' in window || navigator.maxTouchPoints > 0,
+    };
+  }
+
   // ── UI helpers ────────────────────────────────────────────────────────
   function setLoader(msg) {
     document.getElementById('loader-msg').textContent = msg || 'Loading…';
@@ -646,6 +664,7 @@
     return apiPost('/api/license/activate', {
       userId:      CFG.userId,
       fingerprint: state.fingerprint,
+      deviceInfo:  buildDeviceInfo(),
     }).then(function(res) {
       if (!res.allowed) {
         showBlocker(
@@ -668,6 +687,7 @@
     return apiPost('/api/license/ping', {
       token:       state.token,
       fingerprint: state.fingerprint,
+      deviceInfo:  buildDeviceInfo(),
     }).then(function(res) {
       if (!res.allowed) {
         showBlocker('Session Revoked', res.reason, res.code);
