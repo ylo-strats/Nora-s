@@ -70,11 +70,24 @@
   }
   #header .status-pill .dot.ok  { background: var(--success); }
   #header .status-pill .dot.bad { background: var(--danger); }
+  #font-select {
+    max-width: 150px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 12px;
+    padding: 5px 8px;
+    outline: none;
+  }
   #hamburger {
     display: none; background: none; border: none; cursor: pointer;
     color: var(--text); padding: 6px;
   }
-  @media (max-width: 700px) { #hamburger { display: flex; } }
+  @media (max-width: 700px) {
+    #hamburger { display: flex; }
+    #font-select { max-width: 104px; }
+  }
 
   /* ── Layout ──────────────────────────────────────────────────────────── */
   #layout { display: flex; flex: 1; overflow: hidden; }
@@ -400,6 +413,7 @@
       <div class="dot" id="status-dot"></div>
       <span id="status-txt">Verifying…</span>
     </div>
+    <select id="font-select" aria-label="Font"></select>
   </div>
 
   <div id="layout">
@@ -447,8 +461,16 @@
     storageKey: 'sdrmv2_bundle',
     tokenKey:   'sdrmv2_token',
     pingKey:    'sdrmv2_ping',
+    fontKey:    'sdrmv2_doc_font',
   };
   var WM_TILE_COUNT = 40;
+  var FONT_OPTIONS = {
+    times:   { label: 'Times New Roman', css: '"Times New Roman", Georgia, serif' },
+    georgia: { label: 'Georgia', css: 'Georgia, "Times New Roman", serif' },
+    arial:   { label: 'Arial', css: 'Arial, Helvetica, sans-serif' },
+    verdana: { label: 'Verdana', css: 'Verdana, Geneva, sans-serif' },
+    system:  { label: 'System UI', css: '"Segoe UI", system-ui, sans-serif' },
+  };
 
   var params = new URLSearchParams(window.location.search);
   if (CFG.userId.indexOf('__PACKAGE_USER_ID__') !== -1) {
@@ -543,8 +565,32 @@
     document.getElementById('status-txt').textContent = text;
   }
 
+  function setDocFont(fontId, persist) {
+    var font = FONT_OPTIONS[fontId] || FONT_OPTIONS.times;
+    document.documentElement.style.setProperty('--doc-font-family', font.css);
+    var select = document.getElementById('font-select');
+    if (select) select.value = FONT_OPTIONS[fontId] ? fontId : 'times';
+    if (persist) localStorage.setItem(CFG.fontKey, FONT_OPTIONS[fontId] ? fontId : 'times');
+  }
+
+  function initFontSelector() {
+    var select = document.getElementById('font-select');
+    if (!select) return;
+    select.innerHTML = Object.keys(FONT_OPTIONS).map(function(id) {
+      return '<option value="' + id + '">' + escHtml(FONT_OPTIONS[id].label) + '</option>';
+    }).join('');
+    select.onchange = function() { setDocFont(select.value, true); };
+    var saved = localStorage.getItem(CFG.fontKey);
+    if (saved && FONT_OPTIONS[saved]) setDocFont(saved, false);
+  }
+
   function applyViewerConfig(config) {
     if (!config || !config.docFontFamily) return;
+    if (localStorage.getItem(CFG.fontKey)) return;
+    if (config.docFont && FONT_OPTIONS[config.docFont]) {
+      setDocFont(config.docFont, false);
+      return;
+    }
     document.documentElement.style.setProperty('--doc-font-family', config.docFontFamily);
   }
 
@@ -864,6 +910,7 @@
   // ── Main ──────────────────────────────────────────────────────────────
   function main() {
     state.fingerprint = buildFingerprint();
+    initFontSelector();
 
     document.getElementById('uid-display').textContent = CFG.userId;
     document.getElementById('fp-display').textContent  = state.fingerprint.slice(0, 12) + '…';

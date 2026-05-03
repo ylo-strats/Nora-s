@@ -269,6 +269,7 @@
           <thead>
             <tr>
               <th>User ID</th>
+              <th>Name</th>
               <th>Status</th>
               <th>Devices</th>
               <th>Last Seen</th>
@@ -296,6 +297,15 @@
           <tbody id="devices-tbody"></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- Access log -->
+    <div class="panel">
+      <div class="panel-header">
+        Recent Access
+        <div class="actions"><button class="btn-ghost btn-sm" onclick="loadStats()">â†»</button></div>
+      </div>
+      <div id="access-log"></div>
     </div>
 
     <!-- Suspicious log -->
@@ -413,6 +423,7 @@
       document.getElementById('cfg-max-dev').value         = data.config.maxDevicesPerUser;
       renderFontOptions(data.viewerFonts || {}, data.config.docFont);
       renderUsers(data.users);
+      renderAccessLog(data.activityLog || []);
       renderLog(data.suspiciousLog);
       if (openDevicesUserId) renderDeviceRows(openDevicesUserId);
     }).catch(function(e) {
@@ -441,7 +452,10 @@
   // ── Users table ──────────────────────────────────────────────────────
   function renderUsers(users) {
     var filter = document.getElementById('user-search').value.toLowerCase();
-    var filtered = filter ? users.filter(function(u) { return u.id.toLowerCase().indexOf(filter) !== -1; }) : users;
+    var filtered = filter ? users.filter(function(u) {
+      return u.id.toLowerCase().indexOf(filter) !== -1 ||
+        String(u.displayName || '').toLowerCase().indexOf(filter) !== -1;
+    }) : users;
     var tbody = document.getElementById('users-tbody');
     var empty = document.getElementById('users-empty');
 
@@ -458,8 +472,10 @@
       var banBtn = u.banned
         ? '<button class="btn-success btn-sm" onclick="setBan(\'' + u.id + '\', false)">Unban</button>'
         : '<button class="btn-danger btn-sm" onclick="setBan(\'' + u.id + '\', true)">Ban</button>';
+      var name = u.displayName ? esc(u.displayName) : '<span style="color:var(--muted)">â€”</span>';
       return '<tr>' +
         '<td style="font-family:monospace;font-weight:600">' + esc(u.id) + '</td>' +
+        '<td>' + name + '</td>' +
         '<td>' + statusBadge + '</td>' +
         '<td>' +
           '<button class="btn-ghost btn-sm" onclick="showDevices(\'' + u.id + '\')">' +
@@ -468,7 +484,10 @@
         '</td>' +
         '<td style="color:var(--muted);font-size:12px">' + last + '</td>' +
         '<td style="color:var(--muted)">' + (u.accessCount || 0) + '</td>' +
-        '<td style="display:flex;gap:6px">' + banBtn + '</td>' +
+        '<td style="display:flex;gap:6px;flex-wrap:wrap">' +
+          '<button class="btn-ghost btn-sm" onclick="setUserName(\'' + u.id + '\')">Name</button>' +
+          banBtn +
+        '</td>' +
         '</tr>';
     }).join('');
   }
@@ -515,6 +534,16 @@
   };
 
   // ── Actions ──────────────────────────────────────────────────────────
+  window.setUserName = function(userId) {
+    var user = stats && stats.users.find(function(u) { return u.id === userId; });
+    var current = user ? (user.displayName || '') : '';
+    var displayName = prompt('Name for ' + userId, current);
+    if (displayName === null) return;
+    api('POST', '/api/admin/user-name', { userId: userId, displayName: displayName })
+      .then(function() { toast('Name saved'); loadStats(); })
+      .catch(function(e) { toast(e.message, true); });
+  };
+
   window.saveConfig = function() {
     var maxUsers = parseInt(document.getElementById('cfg-max-users').value);
     var maxDev   = parseInt(document.getElementById('cfg-max-dev').value);
@@ -546,13 +575,27 @@
   };
 
   // ── Suspicious log ───────────────────────────────────────────────────
+  function renderAccessLog(log) {
+    var el = document.getElementById('access-log');
+    if (!log.length) { el.innerHTML = '<div class="empty">No visits yet</div>'; return; }
+    el.innerHTML = log.map(function(entry) {
+      var event = entry.event === 'new_device' ? 'New device' : 'Returned';
+      return '<div class="log-entry">' +
+        '<span class="ts">' + new Date(entry.ts).toLocaleString() + '</span>' +
+        '<span class="uid">' + esc(entry.label || entry.userId) + '</span>' +
+        '<span class="reason">' + esc(event) + '</span>' +
+        '<span class="ip">' + esc(entry.ip || '') + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
   function renderLog(log) {
     var el = document.getElementById('suspicious-log');
     if (!log.length) { el.innerHTML = '<div class="empty">No suspicious activity detected</div>'; return; }
     el.innerHTML = log.map(function(entry) {
       return '<div class="log-entry">' +
         '<span class="ts">' + new Date(entry.ts).toLocaleString() + '</span>' +
-        '<span class="uid">' + esc(entry.userId) + '</span>' +
+        '<span class="uid">' + esc(entry.label || entry.userId) + '</span>' +
         '<span class="reason">' + esc(entry.reason) + '</span>' +
         '<span class="ip">' + esc(entry.ip || '') + '</span>' +
         '</div>';

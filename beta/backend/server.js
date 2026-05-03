@@ -72,6 +72,18 @@ function normalizeConfig(config = {}) {
   return next;
 }
 
+function normalizeUserRecord(user = {}) {
+  return {
+    ...user,
+    created: user.created || now(),
+    displayName: String(user.displayName || '').trim().slice(0, 80),
+    banned: user.banned || false,
+    devices: Array.isArray(user.devices) ? user.devices : [],
+    lastSeen: user.lastSeen || null,
+    accessCount: user.accessCount || 0,
+  };
+}
+
 function viewerConfig() {
   const font = VIEWER_FONTS[db.config.docFont] || VIEWER_FONTS[DEFAULT_CONFIG.docFont];
   return {
@@ -91,6 +103,7 @@ function loadDB() {
     config: { ...DEFAULT_CONFIG },
     users: {},
     suspiciousLog: [],
+    activityLog: [],
   };
 }
 
@@ -103,7 +116,9 @@ function saveDB(db) {
 let db = loadDB();
 db.config = normalizeConfig(db.config);
 db.users = db.users || {};
+Object.keys(db.users).forEach(id => { db.users[id] = normalizeUserRecord(db.users[id]); });
 db.suspiciousLog = db.suspiciousLog || [];
+db.activityLog = db.activityLog || [];
 saveDB(db);
 
 // ─── Crypto helpers ───────────────────────────────────────────────────────────
@@ -114,12 +129,18 @@ function normalizeUserId(userId) {
   return String(userId || 'USER-001').trim().toUpperCase().slice(0, 32);
 }
 
+function userLabel(userId) {
+  const user = db.users[userId];
+  return user?.displayName ? `${user.displayName} (${userId})` : userId;
+}
+
 function ensurePublicUser() {
   if (process.env.AUTO_SEED_PUBLIC_USER === 'false') return;
   if (db.users[PUBLIC_USER_ID]) return;
 
   db.users[PUBLIC_USER_ID] = {
     created: now(),
+    displayName: '',
     banned: false,
     devices: [],
     lastSeen: null,
@@ -173,11 +194,33 @@ function aesEncrypt(plaintext) {
 }
 
 function logSuspicious(userId, fingerprint, reason, ip) {
-  const entry = { ts: now(), userId, fp: String(fingerprint).slice(0, 20) + '…', reason, ip };
+  const entry = {
+    ts: now(),
+    userId,
+    userName: db.users[userId]?.displayName || '',
+    label: userLabel(userId),
+    fp: String(fingerprint).slice(0, 20) + '…',
+    reason,
+    ip,
+  };
   db.suspiciousLog.unshift(entry);
   if (db.suspiciousLog.length > 1000) db.suspiciousLog.length = 1000;
   saveDB(db);
   console.warn('[SUSPICIOUS]', entry);
+}
+
+function logAccess(userId, event, ip, meta = {}) {
+  const entry = {
+    ts: now(),
+    userId,
+    userName: db.users[userId]?.displayName || '',
+    label: userLabel(userId),
+    event,
+    ip,
+    ...meta,
+  };
+  db.activityLog.unshift(entry);
+  if (db.activityLog.length > 1000) db.activityLog.length = 1000;
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -256,6 +299,9 @@ app.post('/api/license/activate', apiLimiter, (req, res) => {
 
   user.lastSeen    = now();
   user.accessCount = (user.accessCount || 0) + 1;
+  logAccess(uid, knownDevice ? 'returning_device' : 'new_device', ip, {
+    deviceCount: user.devices.length,
+  });
   saveDB(db);
 
   return res.json({
@@ -337,6 +383,8 @@ app.post('/api/license/chunk', apiLimiter, (req, res) => {
 app.get('/api/admin/stats', adminLimiter, requireAdmin, (req, res) => {
   const users = Object.entries(db.users).map(([id, u]) => ({
     id,
+    displayName:  u.displayName || '',
+    label:        userLabel(id),
     banned:      u.banned || false,
     devices:     u.devices,
     deviceCount: u.devices.length,
@@ -353,6 +401,7 @@ app.get('/api/admin/stats', adminLimiter, requireAdmin, (req, res) => {
     totalBanned:   users.filter(u => u.banned).length,
     users,
     suspiciousLog: db.suspiciousLog.slice(0, 200),
+    activityLog:   db.activityLog.slice(0, 200),
   });
 });
 
@@ -393,6 +442,15 @@ app.post('/api/admin/config', adminLimiter, requireAdmin, (req, res) => {
   res.json({ ok: true, config: db.config });
 });
 
+app.post('/api/admin/user-name', adminLimiter, requireAdmin, (req, res) => {
+  const userId = normalizeUserId(req.body?.userId);
+  const displayName = String(req.body?.displayName || '').trim().slice(0, 80);
+  if (!userId || !db.users[userId]) return res.status(404).json({ error: 'User not found' });
+  db.users[userId].displayName = displayName;
+  saveDB(db);
+  res.json({ ok: true, userId, displayName, label: userLabel(userId) });
+});
+
 app.post('/api/admin/issue', adminLimiter, requireAdmin, (req, res) => {
   const count = Object.keys(db.users).length;
   if (count >= db.config.maxUsers) {
@@ -400,7 +458,7 @@ app.post('/api/admin/issue', adminLimiter, requireAdmin, (req, res) => {
   }
   const newId = req.body?.userId || `USER-${String(count + 1).padStart(3, '0')}`;
   if (db.users[newId]) return res.status(409).json({ error: 'User ID already exists' });
-  db.users[newId] = { created: now(), banned: false, devices: [], lastSeen: null, accessCount: 0 };
+  db.users[newId] = { created: now(), displayName: '', banned: false, devices: [], lastSeen: null, accessCount: 0 };
   saveDB(db);
   res.json({ ok: true, userId: newId });
 });
@@ -429,7 +487,7 @@ app.post('/api/admin/seed', adminLimiter, requireAdmin, (req, res) => {
   for (let i = 1; i <= n; i++) {
     const uid = `USER-${String(i).padStart(3, '0')}`;
     if (!db.users[uid]) {
-      db.users[uid] = { created: now(), banned: false, devices: [], lastSeen: null, accessCount: 0 };
+      db.users[uid] = { created: now(), displayName: '', banned: false, devices: [], lastSeen: null, accessCount: 0 };
       created++;
     }
   }

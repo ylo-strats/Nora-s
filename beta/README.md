@@ -133,11 +133,14 @@ Open `admin/index.html` in any browser. Enter your server URL and admin secret.
 
 **Capabilities:**
 - View all issued users, active devices, access counts
+- Assign readable names to user IDs and see those names in visit/error logs
+- View recent successful access events
 - Ban / unban users (immediate effect on next ping)
 - Revoke individual device slots (frees a slot for re-activation)
 - Issue new user IDs
 - Adjust max users and max devices per user globally
 - Change the document font shown to users
+- Users can also choose their own local document font in the viewer
 - Monitor suspicious activity log (unknown packages, device limit violations, etc.)
 
 ---
