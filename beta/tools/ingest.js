@@ -86,6 +86,14 @@ function attr(xml, name) {
   return m ? m[1] : '';
 }
 
+function anyAttr(xml, names) {
+  for (const name of names) {
+    const value = attr(xml, name);
+    if (value) return value;
+  }
+  return '';
+}
+
 function tag(xml, name) {
   const m = String(xml || '').match(new RegExp('<' + name + '\\b[\\s\\S]*?<\\/' + name + '>'));
   return m ? m[0] : '';
@@ -155,11 +163,30 @@ function renderStyledText(text, style) {
   return html;
 }
 
-function renderRun(runXml) {
+function renderImage(runXml, imageResolver) {
+  if (!imageResolver) return '';
+  const relId = anyAttr(runXml, ['r:embed', 'r:link', 'r:id']);
+  if (!relId) return '';
+
+  const src = imageResolver(relId);
+  if (!src) return '';
+
+  const extent = tagOpen(runXml, 'wp:extent');
+  const cx = parseInt(attr(extent, 'cx'), 10);
+  const cy = parseInt(attr(extent, 'cy'), 10);
+  const width = Number.isFinite(cx) && cx > 0 ? Math.round(cx / 9525) : 0;
+  const height = Number.isFinite(cy) && cy > 0 ? Math.round(cy / 9525) : 0;
+  const sizeStyle = width ? `width:${width}px;max-width:100%;height:auto;` : 'max-width:100%;height:auto;';
+  const alt = escHtml(anyAttr(runXml, ['descr', 'title', 'name']) || 'Document image');
+
+  return `<img src="${escHtml(src)}" alt="${alt}" draggable="false" style="${sizeStyle}">`;
+}
+
+function renderRun(runXml, imageResolver) {
   const ownStyle = runStyleFromXml(tag(runXml, 'w:rPr'));
   const style = mergeRunStyles({ bold: false, italic: false, underline: false, style: '' }, ownStyle);
   const parts = [];
-  const tokens = runXml.match(/<w:t\b[\s\S]*?<\/w:t>|<w:tab\/>|<w:br\b[^>]*\/>/g) || [];
+  const tokens = runXml.match(/<w:t\b[\s\S]*?<\/w:t>|<w:drawing\b[\s\S]*?<\/w:drawing>|<w:pict\b[\s\S]*?<\/w:pict>|<w:tab\/>|<w:br\b[^>]*\/>/g) || [];
 
   for (const token of tokens) {
     if (token.startsWith('<w:tab')) {
@@ -168,6 +195,10 @@ function renderRun(runXml) {
     }
     if (token.startsWith('<w:br')) {
       parts.push('<br>');
+      continue;
+    }
+    if (token.startsWith('<w:drawing') || token.startsWith('<w:pict')) {
+      parts.push(renderImage(token, imageResolver));
       continue;
     }
     const text = token.replace(/^<w:t\b[^>]*>/, '').replace(/<\/w:t>$/, '');
@@ -185,7 +216,7 @@ function paragraphText(pXml) {
     .trim();
 }
 
-function renderDocxXmlToHtml(documentXml) {
+function renderDocxXmlToHtml(documentXml, imageResolver) {
   const paragraphs = documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) || [];
   const html = [];
   let listOpen = false;
@@ -204,7 +235,7 @@ function renderDocxXmlToHtml(documentXml) {
     const isHeading2 = styleId === '2' || /^Heading2$/i.test(styleId);
     const isList = /<w:numPr\b/.test(pPr) && !isHeading1 && !isHeading2;
     const runs = pXml.match(/<w:r\b[\s\S]*?<\/w:r>/g) || [];
-    const content = runs.map(r => renderRun(r)).join('').trim();
+    const content = runs.map(r => renderRun(r, imageResolver)).join('').trim();
 
     if (!content) continue;
 
@@ -275,6 +306,74 @@ function addSubheadingIds(html, sectionId) {
   return { html: output, children };
 }
 
+function parseRelationships(xml) {
+  const rels = {};
+  const items = String(xml || '').match(/<Relationship\b[^>]*\/>/g) || [];
+  for (const item of items) {
+    const id = attr(item, 'Id');
+    const target = attr(item, 'Target');
+    const type = attr(item, 'Type');
+    if (!id || !target || !/\/image$/i.test(type)) continue;
+    rels[id] = target;
+  }
+  return rels;
+}
+
+function safeAssetDir() {
+  return path.resolve(__dirname, '..', 'viewer', 'assets', 'doc-images');
+}
+
+function imageExtFromPath(filePath) {
+  const ext = path.extname(filePath || '').toLowerCase();
+  return ext && /^[a-z0-9.]+$/.test(ext) ? ext : '.bin';
+}
+
+function extractDocxImages(zip, inputFile) {
+  const relXml = zip.readAsText('word/_rels/document.xml.rels');
+  const rels = parseRelationships(relXml);
+  const assetDir = safeAssetDir();
+  const publicPrefix = 'assets/doc-images';
+  const imageMap = {};
+  let extracted = 0;
+
+  fs.rmSync(assetDir, { recursive: true, force: true });
+  fs.mkdirSync(assetDir, { recursive: true });
+
+  for (const [relId, target] of Object.entries(rels)) {
+    const cleanTarget = target.replace(/\\/g, '/').replace(/^\.\//, '');
+    const zipPath = path.posix.normalize(path.posix.join('word', cleanTarget));
+    if (!zipPath.startsWith('word/media/')) continue;
+
+    const entry = zip.getEntry(zipPath);
+    if (!entry) continue;
+
+    const data = entry.getData();
+    const hash = crypto
+      .createHash('sha256')
+      .update(path.basename(inputFile))
+      .update(relId)
+      .update(data)
+      .digest('hex')
+      .slice(0, 16);
+    const filename = `${hash}${imageExtFromPath(zipPath)}`;
+    fs.writeFileSync(path.join(assetDir, filename), data);
+    imageMap[relId] = `${publicPrefix}/${filename}`;
+    extracted++;
+  }
+
+  if (!extracted) {
+    fs.rmSync(assetDir, { recursive: true, force: true });
+  }
+
+  return {
+    imageMap,
+    count: extracted,
+    resolve(relId) {
+      return imageMap[relId] || '';
+    },
+  };
+}
+
 async function extractDocx(filePath) {
   const zip = new AdmZip(filePath);
   const documentXml = zip.readAsText('word/document.xml');
@@ -283,7 +382,10 @@ async function extractDocx(filePath) {
     process.exit(1);
   }
 
-  const html = renderDocxXmlToHtml(documentXml);
+  const images = extractDocxImages(zip, filePath);
+  if (images.count) console.log(`[Ingest] Extracted ${images.count} image(s).`);
+
+  const html = renderDocxXmlToHtml(documentXml, images.resolve);
   return splitHtmlByHeadings(html);
 }
 
