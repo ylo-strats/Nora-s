@@ -511,69 +511,106 @@
   };
 
   // ── Fingerprint ───────────────────────────────────────────────────────
-  function buildFingerprint() {
-    // Canvas fingerprint
+  function simpleHash(value) {
+    var hash = 0;
+    var text = String(value || '');
+    for (var i = 0; i < text.length; i++) {
+      hash = ((hash << 5) - hash) + text.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash).toString(36);
+  }
+
+  function readCanvasHash() {
     var canvas = document.createElement('canvas');
     var ctx    = canvas.getContext('2d');
+    if (!ctx) return 'no-canvas';
     ctx.textBaseline = 'top';
     ctx.font = '14px Arial';
     ctx.fillStyle = '#f00';
     ctx.fillText('fp', 2, 2);
-    var canvasFp = canvas.toDataURL().slice(-30);
+    return simpleHash(canvas.toDataURL().slice(-120));
+  }
 
-    // WebGL fingerprint
+  function readWebGLInfo() {
+    var canvas = document.createElement('canvas');
     var gl = canvas.getContext('webgl');
-    var glInfo = gl ? (gl.getParameter(gl.RENDERER) + gl.getParameter(gl.VENDOR)) : 'ngl';
-
-    var raw = [
-      navigator.userAgent,
-      navigator.language,
-      screen.width + 'x' + screen.height,
-      screen.colorDepth,
-      new Date().getTimezoneOffset(),
-      Intl.DateTimeFormat().resolvedOptions().timeZone,
-      navigator.hardwareConcurrency || 0,
-      (navigator.deviceMemory || 0),
-      !!window.chrome,
-      !!window.safari,
-      navigator.platform || '',
-      canvasFp,
-      glInfo.slice(0, 40),
-    ].join('|');
-
-    // Simple deterministic hash (not cryptographic — server hashes with HMAC)
-    var hash = 0;
-    for (var i = 0; i < raw.length; i++) {
-      hash = ((hash << 5) - hash) + raw.charCodeAt(i);
-      hash |= 0;
-    }
-
-    // Persistent local salt (survives reloads, lost on clear-storage)
-    var salt = localStorage.getItem('_sdrmSalt');
-    if (!salt) {
-      salt = Math.random().toString(36).slice(2) + Date.now().toString(36);
-      localStorage.setItem('_sdrmSalt', salt);
-    }
-
-    return btoa(Math.abs(hash).toString(16) + ':' + salt + ':' + navigator.userAgent.slice(0, 20)).slice(0, 80);
+    if (!gl) return { vendor: '', renderer: '', version: '' };
+    var debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    return {
+      vendor: debugInfo ? (gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || '') : (gl.getParameter(gl.VENDOR) || ''),
+      renderer: debugInfo ? (gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || '') : (gl.getParameter(gl.RENDERER) || ''),
+      version: gl.getParameter(gl.VERSION) || '',
+    };
   }
 
   function buildDeviceInfo() {
+    var screenInfo = {
+      width: screen.width || 0,
+      height: screen.height || 0,
+      availWidth: screen.availWidth || 0,
+      availHeight: screen.availHeight || 0,
+      colorDepth: screen.colorDepth || 0,
+      pixelRatio: window.devicePixelRatio || 1,
+    };
+    var webglInfo = readWebGLInfo();
+    var languageList = navigator.languages ? Array.prototype.slice.call(navigator.languages, 0, 6) : [];
+    var connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection || {};
     return {
       userAgent: navigator.userAgent || '',
       platform: navigator.platform || '',
+      vendor: navigator.vendor || '',
+      languages: languageList,
       language: navigator.language || '',
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
-      screen: {
-        width: screen.width || 0,
-        height: screen.height || 0,
-        colorDepth: screen.colorDepth || 0,
-        pixelRatio: window.devicePixelRatio || 1,
-      },
+      timezoneOffset: new Date().getTimezoneOffset(),
+      screen: screenInfo,
       hardwareConcurrency: navigator.hardwareConcurrency || 0,
       deviceMemory: navigator.deviceMemory || 0,
+      maxTouchPoints: navigator.maxTouchPoints || 0,
       touch: 'ontouchstart' in window || navigator.maxTouchPoints > 0,
+      webgl: webglInfo,
+      canvasHash: readCanvasHash(),
+      audioSampleRate: (window.AudioContext || window.webkitAudioContext)
+        ? (function() {
+            try {
+              var ctx = new (window.AudioContext || window.webkitAudioContext)();
+              var rate = ctx.sampleRate || 0;
+              if (ctx.close) ctx.close();
+              return rate;
+            } catch (e) { return 0; }
+          })()
+        : 0,
+      cookieEnabled: navigator.cookieEnabled !== false,
+      doNotTrack: navigator.doNotTrack || window.doNotTrack || '',
+      connection: {
+        effectiveType: connection.effectiveType || '',
+        downlink: connection.downlink || 0,
+        rtt: connection.rtt || 0,
+      },
     };
+  }
+
+  function buildFingerprint() {
+    var deviceInfo = buildDeviceInfo();
+    var raw = [
+      deviceInfo.platform,
+      deviceInfo.timezone,
+      deviceInfo.timezoneOffset,
+      deviceInfo.screen.width + 'x' + deviceInfo.screen.height,
+      deviceInfo.screen.availWidth + 'x' + deviceInfo.screen.availHeight,
+      deviceInfo.screen.colorDepth,
+      deviceInfo.screen.pixelRatio,
+      deviceInfo.hardwareConcurrency,
+      deviceInfo.deviceMemory,
+      deviceInfo.maxTouchPoints,
+      deviceInfo.webgl.vendor,
+      deviceInfo.webgl.renderer,
+      deviceInfo.canvasHash,
+      deviceInfo.audioSampleRate,
+    ].join('|');
+
+    return 'dev2:' + btoa(raw).replace(/[^a-zA-Z0-9]/g, '').slice(0, 80);
   }
 
   // ── UI helpers ────────────────────────────────────────────────────────

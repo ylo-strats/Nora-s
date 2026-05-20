@@ -139,6 +139,9 @@ function normalizeUserRecord(user = {}) {
   const devices = Array.isArray(user.devices) ? user.devices.map((device) => ({
     ...device,
     displayName: cleanText(device.displayName, 80),
+    fingerprints: Array.isArray(device.fingerprints)
+      ? Array.from(new Set(device.fingerprints.map(fp => String(fp || '').slice(0, 128)).filter(Boolean))).slice(0, 8)
+      : (device.fpHash ? [String(device.fpHash)] : []),
     snapshot: device.snapshot || {},
   })) : [];
   return {
@@ -259,20 +262,44 @@ function cleanText(value, max = 120) {
 
 function sanitizeDeviceInfo(info = {}) {
   const screenInfo = info.screen || {};
+  const webglInfo = info.webgl || {};
+  const connectionInfo = info.connection || {};
   return {
     userAgent: cleanText(info.userAgent, 300),
     platform: cleanText(info.platform, 80),
+    vendor: cleanText(info.vendor, 80),
     language: cleanText(info.language, 40),
+    languages: Array.isArray(info.languages)
+      ? info.languages.slice(0, 6).map(lang => cleanText(lang, 40)).filter(Boolean)
+      : [],
     timezone: cleanText(info.timezone, 80),
+    timezoneOffset: Number.isFinite(Number(info.timezoneOffset)) ? Number(info.timezoneOffset) : null,
     screen: {
       width: Math.max(0, parseInt(screenInfo.width) || 0),
       height: Math.max(0, parseInt(screenInfo.height) || 0),
+      availWidth: Math.max(0, parseInt(screenInfo.availWidth) || 0),
+      availHeight: Math.max(0, parseInt(screenInfo.availHeight) || 0),
       colorDepth: Math.max(0, parseInt(screenInfo.colorDepth) || 0),
       pixelRatio: Math.max(0, Number(screenInfo.pixelRatio) || 0),
     },
     hardwareConcurrency: Math.max(0, parseInt(info.hardwareConcurrency) || 0),
     deviceMemory: Math.max(0, Number(info.deviceMemory) || 0),
+    maxTouchPoints: Math.max(0, parseInt(info.maxTouchPoints) || 0),
     touch: !!info.touch,
+    webgl: {
+      vendor: cleanText(webglInfo.vendor, 120),
+      renderer: cleanText(webglInfo.renderer, 160),
+      version: cleanText(webglInfo.version, 80),
+    },
+    canvasHash: cleanText(info.canvasHash, 40),
+    audioSampleRate: Math.max(0, parseInt(info.audioSampleRate) || 0),
+    cookieEnabled: info.cookieEnabled !== false,
+    doNotTrack: cleanText(info.doNotTrack, 20),
+    connection: {
+      effectiveType: cleanText(connectionInfo.effectiveType, 20),
+      downlink: Math.max(0, Number(connectionInfo.downlink) || 0),
+      rtt: Math.max(0, parseInt(connectionInfo.rtt) || 0),
+    },
   };
 }
 
@@ -302,6 +329,65 @@ function ensurePublicUser() {
 
 function hashFp(fp) {
   return crypto.createHmac('sha256', TOKEN_SECRET).update(fp).digest('hex');
+}
+
+function stableText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function closeNumber(a, b, tolerance) {
+  if (!a || !b) return false;
+  return Math.abs(Number(a) - Number(b)) <= tolerance;
+}
+
+function deviceHasFingerprint(device, fpHash) {
+  return device?.fpHash === fpHash || (Array.isArray(device?.fingerprints) && device.fingerprints.includes(fpHash));
+}
+
+function rememberDeviceFingerprint(device, fpHash) {
+  if (!device || !fpHash) return;
+  const fingerprints = Array.isArray(device.fingerprints) ? device.fingerprints : [];
+  device.fingerprints = Array.from(new Set([device.fpHash, ...fingerprints, fpHash].filter(Boolean))).slice(-8);
+  if (!device.fpHash) device.fpHash = fpHash;
+}
+
+function deviceSnapshotScore(a = {}, b = {}) {
+  const as = a.screen || {};
+  const bs = b.screen || {};
+  const aw = a.webgl || {};
+  const bw = b.webgl || {};
+  let score = 0;
+
+  if (stableText(a.platform) && stableText(a.platform) === stableText(b.platform)) score += 14;
+  if (stableText(a.timezone) && stableText(a.timezone) === stableText(b.timezone)) score += 14;
+  if (a.timezoneOffset !== null && b.timezoneOffset !== null && a.timezoneOffset === b.timezoneOffset) score += 6;
+  if (as.width && as.height && as.width === bs.width && as.height === bs.height) score += 16;
+  if (as.availWidth && as.availHeight && closeNumber(as.availWidth, bs.availWidth, 80) && closeNumber(as.availHeight, bs.availHeight, 80)) score += 8;
+  if (as.colorDepth && as.colorDepth === bs.colorDepth) score += 4;
+  if (as.pixelRatio && bs.pixelRatio && Math.abs(as.pixelRatio - bs.pixelRatio) < 0.05) score += 8;
+  if (a.hardwareConcurrency && a.hardwareConcurrency === b.hardwareConcurrency) score += 12;
+  if (a.deviceMemory && b.deviceMemory && Math.abs(a.deviceMemory - b.deviceMemory) <= 1) score += 8;
+  if (a.touch === b.touch) score += 3;
+  if (a.maxTouchPoints === b.maxTouchPoints) score += 4;
+  if (stableText(aw.vendor) && stableText(aw.vendor) === stableText(bw.vendor)) score += 8;
+  if (stableText(aw.renderer) && stableText(aw.renderer) === stableText(bw.renderer)) score += 16;
+  if (a.canvasHash && a.canvasHash === b.canvasHash) score += 8;
+  if (a.audioSampleRate && a.audioSampleRate === b.audioSampleRate) score += 5;
+
+  return score;
+}
+
+function findKnownDevice(user, fpHash, snapshot) {
+  const direct = user.devices.find(device => deviceHasFingerprint(device, fpHash));
+  if (direct) return { device: direct, matchedBy: 'fingerprint', score: 100 };
+
+  let best = null;
+  for (const device of user.devices) {
+    const score = deviceSnapshotScore(device.snapshot, snapshot);
+    if (!best || score > best.score) best = { device, matchedBy: 'snapshot', score };
+  }
+
+  return best && best.score >= 74 ? best : { device: null, matchedBy: 'new_device', score: best?.score || 0 };
 }
 
 function issueToken(userId, fpHash) {
@@ -429,8 +515,9 @@ app.post('/api/license/activate', apiLimiter, (req, res) => {
   }
 
   const fpHash      = hashFp(fp);
-  const knownDevice = user.devices.find(d => d.fpHash === fpHash);
   const snapshot    = sanitizeDeviceInfo(deviceInfo);
+  const deviceMatch = findKnownDevice(user, fpHash, snapshot);
+  const knownDevice = deviceMatch.device;
 
   if (!knownDevice) {
     if (user.devices.length >= db.config.maxDevicesPerUser) {
@@ -443,6 +530,7 @@ app.post('/api/license/activate', apiLimiter, (req, res) => {
     }
     user.devices.push({
       fpHash,
+      fingerprints: [fpHash],
       displayName: '',
       snapshot,
       registeredAt: now(),
@@ -450,6 +538,7 @@ app.post('/api/license/activate', apiLimiter, (req, res) => {
       ip,
     });
   } else {
+    rememberDeviceFingerprint(knownDevice, fpHash);
     knownDevice.lastSeen = now();
     knownDevice.ip = ip;
     knownDevice.snapshot = snapshot;
@@ -459,6 +548,8 @@ app.post('/api/license/activate', apiLimiter, (req, res) => {
   user.accessCount = (user.accessCount || 0) + 1;
   logAccess(uid, knownDevice ? 'returning_device' : 'new_device', ip, {
     deviceCount: user.devices.length,
+    matchedBy: deviceMatch.matchedBy,
+    matchScore: deviceMatch.score,
   });
   saveDB(db);
 
@@ -497,8 +588,9 @@ app.post('/api/license/ping', apiLimiter, (req, res) => {
     return res.json({ allowed: false, reason: 'Device verification failed', code: 'FP_MISMATCH' });
   }
 
-  const device = user.devices.find(d => d.fpHash === fpHash);
+  const device = user.devices.find(d => deviceHasFingerprint(d, fpHash));
   if (device) {
+    rememberDeviceFingerprint(device, fpHash);
     device.lastSeen = now();
     device.ip = ip;
     device.snapshot = sanitizeDeviceInfo(deviceInfo);
