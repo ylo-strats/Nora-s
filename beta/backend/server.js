@@ -230,6 +230,10 @@ function userLabel(userId) {
   return user?.displayName ? `${user.displayName} (${userId})` : userId;
 }
 
+function userWatermarkText(userId) {
+  return db.users[userId]?.displayName || userId;
+}
+
 function cleanText(value, max = 120) {
   return String(value || '').trim().slice(0, max);
 }
@@ -443,6 +447,8 @@ app.post('/api/license/activate', apiLimiter, (req, res) => {
     allowed: true,
     token: issueToken(uid, fpHash),
     userId: uid,
+    displayName: user.displayName || '',
+    watermarkText: userWatermarkText(uid),
     viewerConfig: viewerConfig(),
   });
 });
@@ -481,7 +487,14 @@ app.post('/api/license/ping', apiLimiter, (req, res) => {
   user.lastSeen = now();
   saveDB(db);
 
-  return res.json({ allowed: true, token: issueToken(userId, fpHash), viewerConfig: viewerConfig() });
+  return res.json({
+    allowed: true,
+    token: issueToken(userId, fpHash),
+    userId,
+    displayName: user.displayName || '',
+    watermarkText: userWatermarkText(userId),
+    viewerConfig: viewerConfig(),
+  });
 });
 
 // POST /api/license/chunk  { token, fingerprint, chunkId }
@@ -677,7 +690,10 @@ const viewerPath = path.join(__dirname, '..', 'viewer');
 const adminPath  = path.join(__dirname, '..', 'admin');
 
 function sendViewer(req, res) {
-  const userId = normalizeUserId(req.query.user || PUBLIC_USER_ID);
+  const userId = normalizeUserId(req.params?.userId || req.query.user || PUBLIC_USER_ID);
+  if (req.query.user && (req.path === '/viewer' || req.path === '/viewer/index.html')) {
+    return res.redirect(302, `/viewer/${encodeURIComponent(userId)}`);
+  }
   const html = fs.readFileSync(path.join(viewerPath, 'index.html'), 'utf8')
     .replace(/__PACKAGE_USER_ID__/g, userId)
     .replace(/__LICENSE_SERVER__/g, '');
@@ -686,6 +702,10 @@ function sendViewer(req, res) {
 }
 
 app.get(['/', '/index.html', '/viewer', '/viewer/index.html'], sendViewer);
+app.get('/viewer/:userId', (req, res, next) => {
+  if (req.params.userId.includes('.')) return next();
+  return sendViewer(req, res);
+});
 
 app.use(express.static(viewerPath, { index: false }));
 app.use('/viewer', express.static(viewerPath, { index: false }));

@@ -487,6 +487,7 @@
     fingerprint: null,
     manifest:    [],
     activeId:    null,
+    watermarkText: '',
     cache:       {},   // chunkId → decrypted text (in-memory only)
   };
 
@@ -613,13 +614,18 @@
   }
 
   function watermarkText() {
-    return CFG.userId || 'USER';
+    return state.watermarkText || CFG.userId || 'USER';
   }
 
   function setWatermark() {
     var text = watermarkText();
     document.getElementById('watermark').textContent = text;
     renderWatermarkTiles(text);
+  }
+
+  function applyUserProfile(res) {
+    state.watermarkText = (res && (res.watermarkText || res.displayName || res.userId)) || CFG.userId;
+    setWatermark();
   }
 
   function renderWatermarkTiles(text) {
@@ -676,6 +682,7 @@
         throw new Error(res.code);
       }
       applyViewerConfig(res.viewerConfig);
+      applyUserProfile(res);
       state.token = res.token;
       localStorage.setItem(CFG.tokenKey, res.token);
       localStorage.setItem(CFG.pingKey, Date.now().toString());
@@ -694,6 +701,7 @@
         return;
       }
       applyViewerConfig(res.viewerConfig);
+      applyUserProfile(res);
       state.token = res.token;
       localStorage.setItem(CFG.tokenKey, res.token);
       localStorage.setItem(CFG.pingKey, Date.now().toString());
