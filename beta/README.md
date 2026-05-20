@@ -1,8 +1,5 @@
 # SecureDRM v2.0 — Secure Medical Document Viewer
 
-Production-grade document licensing system with per-user device binding,
-AES-256-GCM encrypted content, remote license validation, and admin control panel.
-
 ---
 
 ## Architecture
