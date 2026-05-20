@@ -472,9 +472,28 @@
     system:  { label: 'System UI', css: '"Segoe UI", system-ui, sans-serif' },
   };
 
-  var params = new URLSearchParams(window.location.search);
-  if (CFG.userId.indexOf('__PACKAGE_USER_ID__') !== -1) {
-    CFG.userId = (params.get('user') || 'USER-001').trim().toUpperCase().slice(0, 32);
+  function cleanUserId(value) {
+    return String(value || '').trim().toUpperCase().slice(0, 32);
+  }
+
+  function userIdFromLocation() {
+    var params = new URLSearchParams(window.location.search);
+    var queryId = params.get('user') || params.get('uid') || params.get('id') || params.get('');
+    if (!queryId && window.location.search.length > 1 && window.location.search.indexOf('=') === -1) {
+      queryId = decodeURIComponent(window.location.search.slice(1));
+    }
+    if (queryId) return cleanUserId(queryId);
+
+    var parts = window.location.pathname.split('/').filter(Boolean);
+    var viewerIndex = parts.indexOf('viewer');
+    var pathId = viewerIndex !== -1 ? parts[viewerIndex + 1] : '';
+    if (pathId && pathId.indexOf('.') === -1) return cleanUserId(pathId);
+
+    return 'USER-001';
+  }
+
+  if (CFG.userId === ('__PACKAGE_' + 'USER_ID__')) {
+    CFG.userId = userIdFromLocation();
   }
   if (CFG.server.indexOf('__LICENSE_SERVER__') !== -1) {
     CFG.server = '';

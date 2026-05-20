@@ -225,6 +225,25 @@ function normalizeUserId(userId) {
   return String(userId || 'USER-001').trim().toUpperCase().slice(0, 32);
 }
 
+function userIdFromLegacyQuery(req) {
+  const query = req.query || {};
+  const namedUserId = query.user || query.uid || query.id || query[''];
+  if (namedUserId) return namedUserId;
+
+  const queryKeys = Object.keys(query).filter(Boolean);
+  if (queryKeys.length === 1 && query[queryKeys[0]] === '') return queryKeys[0];
+
+  const rawQuery = String(
+    req._parsedUrl?.query ||
+    String(req.url || '').split('?')[1] ||
+    String(req.originalUrl || '').split('?')[1] ||
+    ''
+  );
+  if (rawQuery.startsWith('=')) return decodeURIComponent(rawQuery.slice(1));
+  if (rawQuery && !rawQuery.includes('=')) return decodeURIComponent(rawQuery);
+  return null;
+}
+
 function userLabel(userId) {
   const user = db.users[userId];
   return user?.displayName ? `${user.displayName} (${userId})` : userId;
@@ -690,8 +709,9 @@ const viewerPath = path.join(__dirname, '..', 'viewer');
 const adminPath  = path.join(__dirname, '..', 'admin');
 
 function sendViewer(req, res) {
-  const userId = normalizeUserId(req.params?.userId || req.query.user || PUBLIC_USER_ID);
-  if (req.query.user && (req.path === '/viewer' || req.path === '/viewer/index.html')) {
+  const queryUserId = userIdFromLegacyQuery(req);
+  const userId = normalizeUserId(req.params?.userId || queryUserId || PUBLIC_USER_ID);
+  if (queryUserId && (req.path === '/viewer' || req.path === '/viewer/index.html')) {
     return res.redirect(302, `/viewer/${encodeURIComponent(userId)}`);
   }
   const html = fs.readFileSync(path.join(viewerPath, 'index.html'), 'utf8')

@@ -504,6 +504,7 @@
         '<td style="color:var(--muted)">' + (u.accessCount || 0) + '</td>' +
         '<td style="display:flex;gap:6px;flex-wrap:wrap">' +
           '<button class="btn-ghost btn-sm" onclick="setUserName(\'' + u.id + '\')">Name</button>' +
+          '<button class="btn-ghost btn-sm" onclick="openViewer(\'' + u.id + '\')">Open</button>' +
           banBtn +
           '<button class="btn-danger btn-sm" onclick="deleteUser(\'' + u.id + '\')">Delete</button>' +
         '</td>' +
@@ -607,11 +608,19 @@
     api('POST', '/api/admin/issue', uid ? { userId: uid } : {})
       .then(function(r) {
         if (!r.ok) { toast(r.error || 'Failed', true); return; }
-        toast('Issued: ' + r.userId + ' - generate the package ZIP with: node tools/generate-packages.js --users ' + r.userId);
+        toast('Issued: ' + r.userId + ' - viewer: ' + viewerUrl(r.userId));
         document.getElementById('inp-new-uid').value = '';
         loadStats();
       })
       .catch(function(e) { toast(e.message, true); });
+  };
+
+  function viewerUrl(userId) {
+    return (cfg.server || window.location.origin).replace(/\/$/, '') + '/viewer/' + encodeURIComponent(userId);
+  }
+
+  window.openViewer = function(userId) {
+    window.open(viewerUrl(userId), '_blank', 'noopener');
   };
 
   window.setBan = function(userId, ban) {
