@@ -176,7 +176,8 @@ function renderImage(runXml, imageResolver) {
   const cy = parseInt(attr(extent, 'cy'), 10);
   const width = Number.isFinite(cx) && cx > 0 ? Math.round(cx / 9525) : 0;
   const height = Number.isFinite(cy) && cy > 0 ? Math.round(cy / 9525) : 0;
-  const sizeStyle = width ? `width:${width}px;max-width:100%;height:auto;` : 'max-width:100%;height:auto;';
+  const scaledWidth = width ? Math.round(width * 1.25) : 0;
+  const sizeStyle = scaledWidth ? `width:${scaledWidth}px;max-width:100%;height:auto;` : 'max-width:100%;height:auto;';
   const alt = escHtml(anyAttr(runXml, ['descr', 'title', 'name']) || 'Document image');
 
   return `<img src="${escHtml(src)}" alt="${alt}" draggable="false" style="${sizeStyle}">`;
