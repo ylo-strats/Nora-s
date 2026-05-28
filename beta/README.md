@@ -2,7 +2,6 @@
 
 ---
 dzhan lox
-
 ## Architecture
 
 ```
