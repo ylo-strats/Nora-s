@@ -254,8 +254,9 @@
     vertical-align: top;
   }
   .doc-shell img {
-    max-width: 100%;
-    height: auto;
+    width: min(100vw, calc(100% + 25%)) !important;
+    max-width: 100vw !important;
+    height: auto !important;
     display: block;
     margin: 16px auto;
     pointer-events: none;
