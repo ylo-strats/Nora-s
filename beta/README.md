@@ -1,6 +1,7 @@
 # SecureDRM v2.0 — Secure Medical Document Viewer
 
 ---
+dzhan lox
 
 ## Architecture
 
