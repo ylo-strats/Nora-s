@@ -155,6 +155,17 @@ function normalizeUserRecord(user = {}) {
   };
 }
 
+function createUserRecord() {
+  return {
+    created: now(),
+    displayName: '',
+    banned: false,
+    devices: [],
+    lastSeen: null,
+    accessCount: 0,
+  };
+}
+
 function viewerConfig() {
   const font = VIEWER_FONTS[db.config.docFont] || VIEWER_FONTS[DEFAULT_CONFIG.docFont];
   return {
@@ -316,14 +327,7 @@ function ensurePublicUser() {
   if (process.env.AUTO_SEED_PUBLIC_USER === 'false') return;
   if (db.users[PUBLIC_USER_ID]) return;
 
-  db.users[PUBLIC_USER_ID] = {
-    created: now(),
-    displayName: '',
-    banned: false,
-    devices: [],
-    lastSeen: null,
-    accessCount: 0,
-  };
+  db.users[PUBLIC_USER_ID] = createUserRecord();
   saveDB(db);
 }
 
@@ -741,7 +745,7 @@ app.post('/api/admin/issue', adminLimiter, requireAdmin, (req, res) => {
     ? normalizeUserId(req.body.userId)
     : `USER-${String(count + 1).padStart(3, '0')}`;
   if (db.users[newId]) return res.status(409).json({ error: 'User ID already exists' });
-  db.users[newId] = { created: now(), displayName: '', banned: false, devices: [], lastSeen: null, accessCount: 0 };
+  db.users[newId] = createUserRecord();
   saveDB(db);
   res.json({ ok: true, userId: newId });
 });
@@ -780,7 +784,7 @@ app.post('/api/admin/seed', adminLimiter, requireAdmin, (req, res) => {
   for (let i = 1; i <= n; i++) {
     const uid = `USER-${String(i).padStart(3, '0')}`;
     if (!db.users[uid]) {
-      db.users[uid] = { created: now(), displayName: '', banned: false, devices: [], lastSeen: null, accessCount: 0 };
+      db.users[uid] = createUserRecord();
       created++;
     }
   }

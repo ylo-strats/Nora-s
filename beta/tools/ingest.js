@@ -390,6 +390,31 @@ async function extractDocx(filePath) {
   return splitHtmlByHeadings(html);
 }
 
+function splitPlainTextSections(text) {
+  const parts = text.split(/\n\n+/);
+  return parts.map((p, i) => ({
+    id: `sec${i + 1}`,
+    title: p.slice(0, 80).split('\n')[0] || `Section ${i + 1}`,
+    content: p,
+  }));
+}
+
+async function readSections(inputFile) {
+  const ext = path.extname(inputFile).toLowerCase();
+
+  if (ext === '.docx') {
+    console.log('[Ingest] Parsing DOCX...');
+    return extractDocx(inputFile);
+  }
+
+  if (ext === '.json') {
+    return JSON.parse(fs.readFileSync(inputFile, 'utf8'));
+  }
+
+  // Treat as plain text -- split by double newline
+  return splitPlainTextSections(fs.readFileSync(inputFile, 'utf8'));
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const getArg = (flag) => {
@@ -407,24 +432,7 @@ async function main() {
 
   console.log(`[Ingest] Reading: ${inputFile}`);
 
-  let sections;
-  const ext = path.extname(inputFile).toLowerCase();
-
-  if (ext === '.docx') {
-    console.log('[Ingest] Parsing DOCX...');
-    sections = await extractDocx(inputFile);
-  } else if (ext === '.json') {
-    sections = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
-  } else {
-    // Treat as plain text — split by double newline
-    const text = fs.readFileSync(inputFile, 'utf8');
-    const parts = text.split(/\n\n+/);
-    sections = parts.map((p, i) => ({
-      id: `sec${i + 1}`,
-      title: p.slice(0, 80).split('\n')[0] || `Section ${i + 1}`,
-      content: p,
-    }));
-  }
+  const sections = await readSections(inputFile);
 
   console.log(`[Ingest] Found ${sections.length} sections. Encrypting...`);
 

@@ -118,7 +118,57 @@
   .form-row  { display: flex; gap: 8px; align-items: center; }
   .form-row input { flex: 1; }
   .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .split-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .panel-stack { display: flex; flex-direction: column; gap: 14px; }
+  .field-label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .field-help,
+  .text-muted {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .field-error {
+    color: var(--danger);
+    font-size: 12px;
+  }
+  .compact-search {
+    width: 180px;
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+  .is-hidden { display: none !important; }
+  .user-id {
+    font-family: monospace;
+    font-weight: 600;
+  }
+  .date-cell,
+  .numeric-cell,
+  .device-meta {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .row-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .device-title { font-weight: 600; }
+  .device-fingerprint {
+    color: var(--muted);
+    font-family: monospace;
+    font-size: 11px;
+  }
+  .empty-row {
+    padding: 20px;
+    text-align: center;
+    color: var(--muted);
+  }
   @media (max-width: 600px) { .config-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 700px) { .split-grid { grid-template-columns: 1fr; } }
 
   /* ── Suspicious log ───────────────────────────────────────────────── */
   .log-entry {
@@ -165,15 +215,15 @@
     </h1>
     <p>Enter your license server URL and admin secret to continue.</p>
     <div>
-      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Server URL</label>
+      <label class="field-label">Server URL</label>
       <input type="text" id="inp-server" placeholder="https://your-server.com"/>
     </div>
     <div>
-      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Admin Secret</label>
+      <label class="field-label">Admin Secret</label>
       <input type="password" id="inp-secret" placeholder="ADMIN_SECRET env var value"/>
     </div>
     <button class="btn-primary" onclick="connectAdmin()">Connect</button>
-    <div id="auth-err" style="color:var(--danger);font-size:12px;display:none"></div>
+    <div id="auth-err" class="field-error is-hidden"></div>
   </div>
 </div>
 
@@ -226,22 +276,22 @@
     </div>
 
     <!-- Config + Issue -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="split-grid">
 
       <div class="panel">
         <div class="panel-header">Global Config</div>
-        <div class="panel-body" style="display:flex;flex-direction:column;gap:14px">
+        <div class="panel-body panel-stack">
           <div class="config-grid">
             <div>
-              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Max Users</label>
+              <label class="field-label">Max Users</label>
               <input type="number" id="cfg-max-users" min="1" max="10000" placeholder="e.g. 50"/>
             </div>
             <div>
-              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Max Devices / User</label>
+              <label class="field-label">Max Devices / User</label>
               <input type="number" id="cfg-max-dev" min="1" max="10" placeholder="e.g. 2"/>
             </div>
             <div>
-              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Document Font</label>
+              <label class="field-label">Document Font</label>
               <select id="cfg-doc-font"></select>
             </div>
           </div>
@@ -251,13 +301,13 @@
 
       <div class="panel">
         <div class="panel-header">Issue New Package</div>
-        <div class="panel-body" style="display:flex;flex-direction:column;gap:14px">
+        <div class="panel-body panel-stack">
           <div>
-            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Custom User ID (optional)</label>
+            <label class="field-label">Custom User ID (optional)</label>
             <input type="text" id="inp-new-uid" placeholder="Auto-generated if empty"/>
           </div>
           <button class="btn-success" onclick="issueUser()">Issue Package</button>
-          <div style="font-size:12px;color:var(--muted)">
+          <div class="field-help">
             Newly issued ID must be embedded into the user's package ZIP by the package generator tool.
           </div>
         </div>
@@ -270,7 +320,7 @@
       <div class="panel-header">
         User Licenses
         <div class="actions">
-          <input type="text" id="user-search" placeholder="Filter users..." style="width:180px;padding:5px 10px;font-size:12px"/>
+          <input type="text" id="user-search" class="compact-search" placeholder="Filter users..."/>
         </div>
       </div>
       <div class="table-wrap">
@@ -288,12 +338,12 @@
           </thead>
           <tbody id="users-tbody"></tbody>
         </table>
-        <div id="users-empty" class="empty" style="display:none">No users issued yet</div>
+        <div id="users-empty" class="empty is-hidden">No users issued yet</div>
       </div>
     </div>
 
     <!-- Devices detail (shown when row expanded) -->
-    <div class="panel" id="devices-panel" style="display:none">
+    <div class="panel is-hidden" id="devices-panel">
       <div class="panel-header">
         Devices - <span id="devices-uid"></span>
         <div class="actions"><button class="btn-ghost btn-sm" onclick="closeDevices()">Close</button></div>
@@ -379,7 +429,7 @@
       return;
     }
     api('GET', '/api/admin/stats').then(function() {
-      document.getElementById('auth-screen').style.display = 'none';
+      document.getElementById('auth-screen').classList.add('is-hidden');
       document.getElementById('admin-app').classList.add('show');
       document.getElementById('server-url-display').textContent = cfg.server;
       loadStats();
@@ -393,12 +443,13 @@
     stopAutoRefresh();
     cfg.server = ''; cfg.secret = '';
     document.getElementById('admin-app').classList.remove('show');
-    document.getElementById('auth-screen').style.display = 'flex';
+    document.getElementById('auth-screen').classList.remove('is-hidden');
   };
 
   function showAuthErr(msg) {
     var el = document.getElementById('auth-err');
-    el.textContent = msg; el.style.display = 'block';
+    el.textContent = msg;
+    el.classList.remove('is-hidden');
   }
 
   // ── API ─────────────────────────────────────────────────────────────
@@ -477,8 +528,12 @@
     var tbody = document.getElementById('users-tbody');
     var empty = document.getElementById('users-empty');
 
-    if (!filtered.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
-    empty.style.display = 'none';
+    if (!filtered.length) {
+      tbody.innerHTML = '';
+      empty.classList.remove('is-hidden');
+      return;
+    }
+    empty.classList.add('is-hidden');
 
     tbody.innerHTML = filtered.map(function(u) {
       var statusBadge = u.banned
@@ -490,9 +545,9 @@
       var banBtn = u.banned
         ? '<button class="btn-success btn-sm" onclick="setBan(\'' + u.id + '\', false)">Unban</button>'
         : '<button class="btn-danger btn-sm" onclick="setBan(\'' + u.id + '\', true)">Ban</button>';
-      var name = u.displayName ? esc(u.displayName) : '<span style="color:var(--muted)">-</span>';
+      var name = u.displayName ? esc(u.displayName) : '<span class="text-muted">-</span>';
       return '<tr>' +
-        '<td style="font-family:monospace;font-weight:600">' + esc(u.id) + '</td>' +
+        '<td class="user-id">' + esc(u.id) + '</td>' +
         '<td>' + name + '</td>' +
         '<td>' + statusBadge + '</td>' +
         '<td>' +
@@ -500,9 +555,9 @@
             u.deviceCount + '/' + (stats ? stats.config.maxDevicesPerUser : '?') +
           '</button>' +
         '</td>' +
-        '<td style="color:var(--muted);font-size:12px">' + last + '</td>' +
-        '<td style="color:var(--muted)">' + (u.accessCount || 0) + '</td>' +
-        '<td style="display:flex;gap:6px;flex-wrap:wrap">' +
+        '<td class="date-cell">' + last + '</td>' +
+        '<td class="numeric-cell">' + (u.accessCount || 0) + '</td>' +
+        '<td class="row-actions">' +
           '<button class="btn-ghost btn-sm" onclick="setUserName(\'' + u.id + '\')">Name</button>' +
           '<button class="btn-ghost btn-sm" onclick="openViewer(\'' + u.id + '\')">Open</button>' +
           banBtn +
@@ -529,32 +584,32 @@
     var user = stats.users.find(function(u) { return u.id === uid; });
     if (!user) return;
     document.getElementById('devices-uid').textContent = uid;
-    document.getElementById('devices-panel').style.display = 'block';
+    document.getElementById('devices-panel').classList.remove('is-hidden');
     document.getElementById('devices-tbody').innerHTML = (user.devices || []).map(function(d) {
-      var deviceName = d.displayName ? esc(d.displayName) : '<span style="color:var(--muted)">Unnamed</span>';
+      var deviceName = d.displayName ? esc(d.displayName) : '<span class="text-muted">Unnamed</span>';
       var snapshot = d.summary || (d.snapshot && d.snapshot.userAgent) || 'No snapshot';
       var safeSnapshot = esc(snapshot);
       return '<tr>' +
         '<td>' +
-          '<div style="font-weight:600">' + deviceName + '</div>' +
-          '<div style="font-family:monospace;font-size:11px;color:var(--muted)">' + esc(d.fpHash.slice(0, 24)) + '...</div>' +
+          '<div class="device-title">' + deviceName + '</div>' +
+          '<div class="device-fingerprint">' + esc(d.fpHash.slice(0, 24)) + '...</div>' +
         '</td>' +
-        '<td style="font-size:12px;color:var(--muted)">' + safeSnapshot + '</td>' +
-        '<td style="font-size:12px;color:var(--muted)">' + new Date(d.registeredAt).toLocaleDateString() + '</td>' +
-        '<td style="font-size:12px;color:var(--muted)">' + new Date(d.lastSeen).toLocaleDateString() + '</td>' +
-        '<td style="font-size:12px;color:var(--muted)">' + esc(d.ip || '-') + '</td>' +
-        '<td style="display:flex;gap:6px;flex-wrap:wrap">' +
+        '<td class="device-meta">' + safeSnapshot + '</td>' +
+        '<td class="date-cell">' + new Date(d.registeredAt).toLocaleDateString() + '</td>' +
+        '<td class="date-cell">' + new Date(d.lastSeen).toLocaleDateString() + '</td>' +
+        '<td class="device-meta">' + esc(d.ip || '-') + '</td>' +
+        '<td class="row-actions">' +
           '<button class="btn-ghost btn-sm" onclick="setDeviceName(\'' + uid + '\',\'' + d.fpHash + '\')">Name</button>' +
           '<button class="btn-ghost btn-sm" onclick="showDeviceSnapshot(\'' + uid + '\',\'' + d.fpHash + '\')">Snapshot</button>' +
           '<button class="btn-danger btn-sm" onclick="revokeDevice(\'' + uid + '\',\'' + d.fpHash + '\')">Revoke</button>' +
         '</td>' +
         '</tr>';
-    }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No devices registered</td></tr>';
+    }).join('') || '<tr><td colspan="6" class="empty-row">No devices registered</td></tr>';
   }
 
   window.closeDevices = function() {
     openDevicesUserId = null;
-    document.getElementById('devices-panel').style.display = 'none';
+    document.getElementById('devices-panel').classList.add('is-hidden');
   };
 
   window.revokeDevice = function(userId, fpHash) {
@@ -681,7 +736,7 @@
 
   // Enter key on auth
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && document.getElementById('auth-screen').style.display !== 'none') {
+    if (e.key === 'Enter' && !document.getElementById('auth-screen').classList.contains('is-hidden')) {
       connectAdmin();
     }
   });
